@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const btuEmailSchema = z
+export const btuEmailSchema = z
   .string()
   .transform((email) => email.trim().toLowerCase())
   .pipe(

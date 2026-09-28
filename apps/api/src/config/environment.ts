@@ -10,6 +10,10 @@ const environmentSchema = z
     CORS_ORIGIN: z.url().default('http://localhost:3000'),
     COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
     API_PUBLIC_URL: z.url(),
+    GOOGLE_CLIENT_ID: z.string().endsWith('.apps.googleusercontent.com'),
+    GOOGLE_CLIENT_SECRET: z.string().min(16).regex(/^\S+$/),
+    GOOGLE_CALLBACK_URL: z.url(),
+    GOOGLE_POST_AUTH_REDIRECT_URL: z.url(),
     SMTP_HOST: z.string().min(1),
     SMTP_PORT: z.coerce.number().int().min(1).max(65_535),
     SMTP_SECURE: z
@@ -36,7 +40,10 @@ const environmentSchema = z
         message: 'API_PUBLIC_URL must use HTTPS in production',
       });
     }
-    if (new URL(value.CORS_ORIGIN).origin !== value.CORS_ORIGIN) {
+    if (
+      URL.canParse(value.CORS_ORIGIN) &&
+      new URL(value.CORS_ORIGIN).origin !== value.CORS_ORIGIN
+    ) {
       context.addIssue({
         code: 'custom',
         message: 'CORS_ORIGIN must be an exact origin without a path',
@@ -56,6 +63,33 @@ const environmentSchema = z
         code: 'custom',
         message: 'SameSite=None requires production HTTPS cookies',
       });
+    }
+    if (
+      URL.canParse(value.API_PUBLIC_URL) &&
+      value.GOOGLE_CALLBACK_URL !==
+        new URL('/api/v1/auth/google/callback', value.API_PUBLIC_URL).toString()
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message:
+          'GOOGLE_CALLBACK_URL must match the API Google callback endpoint',
+      });
+    }
+    if (URL.canParse(value.GOOGLE_POST_AUTH_REDIRECT_URL)) {
+      const destination = new URL(value.GOOGLE_POST_AUTH_REDIRECT_URL);
+      if (
+        destination.origin !== value.CORS_ORIGIN ||
+        destination.search ||
+        destination.hash ||
+        destination.username ||
+        destination.password
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message:
+            'GOOGLE_POST_AUTH_REDIRECT_URL must be a fixed path on CORS_ORIGIN without query or fragment',
+        });
+      }
     }
   });
 

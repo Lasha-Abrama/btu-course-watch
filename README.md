@@ -1,6 +1,6 @@
 # BTU Course Watch
 
-Production-oriented monorepo for a BTU course availability monitoring platform. The API currently supports BTU email registration, verification, and application sessions; course monitoring is not implemented yet.
+Production-oriented monorepo for a BTU course availability monitoring platform. The API currently supports BTU email registration, verification, password login, Google sign-in, and application sessions; course monitoring is not implemented yet.
 
 ## Workspace
 
@@ -32,7 +32,7 @@ The API defaults to `http://localhost:3001`, its health endpoint is `http://loca
 
 Before registration can deliver email, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_FROM`, and `API_PUBLIC_URL` in `apps/api/.env`. Set `SMTP_USER` and `SMTP_PASSWORD` together if your SMTP server requires authentication. Docker Compose starts PostgreSQL only; it does not provide an SMTP server. Production requires HTTPS for `API_PUBLIC_URL` and TLS for SMTP.
 
-The first Prisma migration creates `User` and `EmailVerificationToken`; `20260928010000_auth_sessions` adds `AuthSession` and `RefreshToken`. On an existing checkout, apply pending migrations with `pnpm --filter api exec prisma migrate deploy`. Avoid `db:push` for tracked schema changes.
+The first Prisma migration creates `User` and `EmailVerificationToken`; `20260928010000_auth_sessions` adds `AuthSession` and `RefreshToken`; `20260928020000_google_identity` makes `User.passwordHash` nullable and adds `GoogleIdentity`. On an existing checkout, apply pending migrations with `pnpm --filter api exec prisma migrate deploy`. Avoid `db:push` for tracked schema changes.
 
 ## Email verification milestone
 
@@ -49,6 +49,14 @@ After email verification, `POST /api/v1/auth/login` accepts the registered BTU C
 For local development, cookies use `SameSite=Lax` and are not `Secure` on HTTP localhost. Production cookies are always `Secure`, and both `API_PUBLIC_URL` and `CORS_ORIGIN` must use HTTPS. Set `COOKIE_SAME_SITE=none` only for a production cross-site frontend/API deployment; keep `lax` for same-site deployment. Browser clients on the separate Next.js origin must use `credentials: 'include'`. The API permits credentialed CORS only for the exact configured `CORS_ORIGIN`. Nest's cross-origin request protection rejects unsafe requests from other browser origins, including same-site sibling origins; the configured frontend origin is explicitly trusted. Do not configure a wildcard origin. A production reverse proxy must preserve the request's `Host`, `Origin`, and `Sec-Fetch-Site` headers and serve HTTPS. Cross-site deployments also depend on browser third-party-cookie policy; a same-site deployment is preferable.
 
 This session is for BTU Course Watch only. It does not accept or store BTU Classroom credentials. Login has no frontend page or extension flow yet.
+
+## Google sign-in
+
+Create a Google Cloud OAuth 2.0 **Web application** client, configure its OAuth consent screen, and request only the `openid` and `email` scopes. If the consent screen remains in testing mode, add the BTU Google accounts you will use as test users. Add the exact API callback URI (locally `http://localhost:3001/api/v1/auth/google/callback`) to **Authorized redirect URIs**; scheme, host, port, path, and trailing slash must match. Copy its client ID and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `apps/api/.env`; never commit real credentials. Set `GOOGLE_CALLBACK_URL` to that same exact URI. Set `GOOGLE_POST_AUTH_REDIRECT_URL` to one fixed path on `CORS_ORIGIN` (locally `http://localhost:3000/`). Production requires HTTPS. These four variables are required for API startup. The example values are placeholders, not usable credentials. See [Google's web-server OAuth setup](https://developers.google.com/identity/protocols/oauth2/web-server) for Cloud Console steps.
+
+A browser starts at `GET /api/v1/auth/google`. Google returns to `GET /api/v1/auth/google/callback`; a successful callback issues the existing application access/refresh cookies and redirects only to `GOOGLE_POST_AUTH_REDIRECT_URL`. The OAuth state is bound to a short-lived, signed `HttpOnly` cookie; no Express session, Google access token, or Google refresh token is stored. Failure returns a generic `401`. Client-supplied redirect parameters are ignored. There is no frontend auth page yet; the local destination is the existing home page.
+
+Only Google's explicitly verified email at exactly `btu.edu.ge` is accepted. The Google subject—not email—is the permanent provider identifier. An existing *verified* same-email password account is linked without changing its password. An unverified password account is not auto-linked, to avoid turning a pre-claimed account into a verified account whose password another person knows. One Google subject maps to one user and one user may have at most one Google identity; subject/email changes or conflicting identities fail closed and require manual resolution. Google-only users have no local password and cannot use password login. This milestone treats Google's `email_verified` claim as sufficient for email-based linking, but it does not prove Google Workspace membership or continuing control if the address is later reassigned. This flow never accesses BTU Classroom credentials or sessions.
 
 ## Quality commands
 

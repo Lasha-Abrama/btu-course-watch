@@ -10,12 +10,21 @@ datasource db {
 model User {
   id                     String                  @id @default(uuid()) @db.Uuid
   email                  String                  @unique
-  passwordHash           String
+  passwordHash           String?
   emailVerifiedAt        DateTime?               @db.Timestamptz(3)
   createdAt              DateTime                @default(now()) @db.Timestamptz(3)
   updatedAt              DateTime                @updatedAt @db.Timestamptz(3)
   emailVerificationToken EmailVerificationToken?
   authSessions           AuthSession[]
+  googleIdentity         GoogleIdentity?
+}
+
+model GoogleIdentity {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  subject   String   @unique @db.VarChar(255)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AuthSession {

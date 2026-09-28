@@ -16,7 +16,7 @@ import { PrismaService } from '../src/prisma/prisma.service.js';
 interface TestUser {
   id: string;
   email: string;
-  passwordHash: string;
+  passwordHash: string | null;
   emailVerifiedAt: Date | null;
 }
 
@@ -410,7 +410,7 @@ describe('Authentication HTTP flows (e2e)', () => {
     expect(user?.passwordHash).toMatch(/^\$argon2id\$/);
     expect(
       await argon2.verify(
-        user!.passwordHash,
+        user!.passwordHash!,
         'A sufficiently strong passphrase 42',
       ),
     ).toBe(true);
@@ -647,6 +647,17 @@ describe('Authentication HTTP flows (e2e)', () => {
     expect(unverified.body).toEqual(unknown.body);
     expect(wrong.body).toEqual(unknown.body);
     expect(wrongDomain.body).toEqual(unknown.body);
+    expect(database.sessions.size).toBe(0);
+  });
+
+  it('does not allow password login for a Google-only user without a password hash', async () => {
+    database.users.set('student@btu.edu.ge', {
+      id: randomUUID(),
+      email: 'student@btu.edu.ge',
+      passwordHash: null,
+      emailVerifiedAt: new Date(),
+    });
+    await login().expect(401);
     expect(database.sessions.size).toBe(0);
   });
 
