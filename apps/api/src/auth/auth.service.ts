@@ -4,15 +4,23 @@ import {
   Injectable,
   Logger,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MAIL_SENDER, type MailSender } from './mail/mail-sender.js';
+import { SessionService, type SessionTokens } from './session.service.js';
 
 const TOKEN_LIFETIME_MS = 24 * 60 * 60 * 1_000;
 const RESEND_COOLDOWN_MS = 60 * 1_000;
 const INVALID_TOKEN_MESSAGE = 'Invalid or expired verification token';
+const DUMMY_PASSWORD_HASH = argon2.hash('unused login timing reference', {
+  type: argon2.argon2id,
+  memoryCost: 19_456,
+  timeCost: 2,
+  parallelism: 1,
+});
 
 function createVerificationToken(): { token: string; tokenHash: string } {
   const token = randomBytes(32).toString('base64url');
@@ -36,7 +44,20 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(MAIL_SENDER) private readonly mailSender: MailSender,
+    private readonly sessions: SessionService,
   ) {}
+
+  async login(email: string, password: string): Promise<SessionTokens> {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    const valid = await argon2.verify(
+      user?.passwordHash ?? (await DUMMY_PASSWORD_HASH),
+      password,
+    );
+    if (!valid || !user?.emailVerifiedAt) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    return this.sessions.createSession(user.id);
+  }
 
   async register(email: string, password: string): Promise<void> {
     const passwordHash = await argon2.hash(password, {

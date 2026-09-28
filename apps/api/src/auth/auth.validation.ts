@@ -39,6 +39,11 @@ export const registrationSchema = z.strictObject({
   password: passwordSchema,
 });
 
+export const loginSchema = z.strictObject({
+  email: btuEmailSchema,
+  password: z.string().min(1).max(128),
+});
+
 export const resendVerificationSchema = z.strictObject({
   email: btuEmailSchema,
 });

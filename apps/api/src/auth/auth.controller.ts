@@ -5,7 +5,12 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
+  Res,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Request, Response } from 'express';
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -13,6 +18,10 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+  ApiCookieAuth,
+  ApiNoContentResponse,
 } from '@nestjs/swagger';
 import type {
   AuthAcceptedResponse,
@@ -21,9 +30,16 @@ import type {
 import { AuthService } from './auth.service.js';
 import {
   registrationSchema,
+  loginSchema,
   resendVerificationSchema,
   verifyEmailSchema,
 } from './auth.validation.js';
+import {
+  clearSessionCookies,
+  getSessionCookies,
+  setSessionCookies,
+} from './session.cookies.js';
+import { SessionService } from './session.service.js';
 
 const ACCEPTED_RESPONSE = {
   message: 'If eligible, a verification email will be sent.',
@@ -32,7 +48,89 @@ const ACCEPTED_RESPONSE = {
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly sessions: SessionService,
+    private readonly config: ConfigService,
+  ) {}
+
+  @Post('login')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Log in with a verified BTU Course Watch account' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['email', 'password'],
+      additionalProperties: false,
+      properties: {
+        email: { type: 'string', format: 'email' },
+        password: { type: 'string', format: 'password' },
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid credentials or account state.',
+  })
+  @ApiNoContentResponse({
+    description:
+      'Logged in; access and refresh tokens set as HttpOnly cookies.',
+  })
+  @ApiForbiddenResponse({ description: 'Request origin is not permitted.' })
+  async login(@Body() body: unknown, @Res() response: Response): Promise<void> {
+    const result = loginSchema.safeParse(body);
+    if (!result.success) throw new UnauthorizedException('Invalid credentials');
+    const tokens = await this.authService.login(
+      result.data.email,
+      result.data.password,
+    );
+    setSessionCookies(response, this.config, tokens);
+    response.status(HttpStatus.NO_CONTENT).send();
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Rotate the application refresh token and renew access',
+  })
+  @ApiCookieAuth('refreshCookie')
+  @ApiNoContentResponse({
+    description: 'Tokens rotated and set as HttpOnly cookies.',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, expired, revoked, or reused refresh token.',
+  })
+  @ApiForbiddenResponse({ description: 'Request origin is not permitted.' })
+  async refresh(
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise<void> {
+    const tokens = await this.sessions.refresh(
+      getSessionCookies(request).refreshToken,
+    );
+    setSessionCookies(response, this.config, tokens);
+    response.status(HttpStatus.NO_CONTENT).send();
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiCookieAuth('refreshCookie')
+  @ApiNoContentResponse({
+    description:
+      'Session revoked where present; authentication cookies cleared.',
+  })
+  @ApiOperation({
+    summary: 'Revoke the current application session and clear cookies',
+  })
+  @ApiForbiddenResponse({ description: 'Request origin is not permitted.' })
+  async logout(
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise<void> {
+    const { refreshToken, accessToken } = getSessionCookies(request);
+    await this.sessions.revoke(refreshToken, accessToken);
+    clearSessionCookies(response, this.config);
+    response.status(HttpStatus.NO_CONTENT).send();
+  }
 
   @Post('register')
   @HttpCode(HttpStatus.ACCEPTED)

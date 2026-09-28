@@ -25,3 +25,14 @@ export interface AuthAcceptedResponse {
 export interface EmailVerifiedResponse {
   message: "Email verified.";
 }
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface CurrentUserResponse {
+  id: string;
+  email: string;
+  emailVerifiedAt: string;
+}

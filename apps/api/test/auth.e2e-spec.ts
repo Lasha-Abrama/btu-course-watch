@@ -29,9 +29,27 @@ interface TestToken {
   sentAt: Date;
 }
 
+interface TestSession {
+  id: string;
+  userId: string;
+  accessTokenHash: string;
+  accessExpiresAt: Date;
+  expiresAt: Date;
+  revokedAt: Date | null;
+}
+
+interface TestRefreshToken {
+  id: string;
+  sessionId: string;
+  tokenHash: string;
+  rotatedAt: Date | null;
+}
+
 class InMemoryPrisma {
   readonly users = new Map<string, TestUser>();
   readonly tokens = new Map<string, TestToken>();
+  readonly sessions = new Map<string, TestSession>();
+  readonly refreshTokens = new Map<string, TestRefreshToken>();
 
   readonly user = {
     create: async ({
@@ -162,11 +180,125 @@ class InMemoryPrisma {
     },
   };
 
+  readonly authSession = {
+    create: async ({
+      data,
+    }: {
+      data: {
+        userId: string;
+        accessTokenHash: string;
+        accessExpiresAt: Date;
+        expiresAt: Date;
+        refreshTokens: { create: { tokenHash: string } };
+      };
+    }) => {
+      const session: TestSession = {
+        id: randomUUID(),
+        userId: data.userId,
+        accessTokenHash: data.accessTokenHash,
+        accessExpiresAt: data.accessExpiresAt,
+        expiresAt: data.expiresAt,
+        revokedAt: null,
+      };
+      this.sessions.set(session.id, session);
+      const refresh: TestRefreshToken = {
+        id: randomUUID(),
+        sessionId: session.id,
+        tokenHash: data.refreshTokens.create.tokenHash,
+        rotatedAt: null,
+      };
+      this.refreshTokens.set(refresh.id, refresh);
+      return session;
+    },
+    findUnique: async ({ where }: { where: { accessTokenHash: string } }) => {
+      const session = [...this.sessions.values()].find(
+        (item) => item.accessTokenHash === where.accessTokenHash,
+      );
+      if (!session) return null;
+      const user = [...this.users.values()].find(
+        (item) => item.id === session.userId,
+      );
+      return { ...session, user };
+    },
+    updateMany: async ({
+      where,
+      data,
+    }: {
+      where: {
+        id?: string;
+        accessTokenHash?: string;
+        revokedAt: null;
+        expiresAt?: { gt: Date };
+      };
+      data: {
+        revokedAt?: Date;
+        accessTokenHash?: string;
+        accessExpiresAt?: Date;
+      };
+    }) => {
+      const session = [...this.sessions.values()].find((item) =>
+        where.id
+          ? item.id === where.id
+          : item.accessTokenHash === where.accessTokenHash,
+      );
+      if (
+        !session ||
+        session.revokedAt ||
+        (where.expiresAt && session.expiresAt <= where.expiresAt.gt)
+      )
+        return { count: 0 };
+      Object.assign(session, data);
+      return { count: 1 };
+    },
+  };
+
+  readonly refreshToken = {
+    findUnique: async ({ where }: { where: { tokenHash: string } }) => {
+      const token = [...this.refreshTokens.values()].find(
+        (item) => item.tokenHash === where.tokenHash,
+      );
+      if (!token) return null;
+      const session = this.sessions.get(token.sessionId)!;
+      const user = [...this.users.values()].find(
+        (item) => item.id === session.userId,
+      );
+      return { ...token, session: { ...session, user } };
+    },
+    updateMany: async ({
+      where,
+      data,
+    }: {
+      where: { id: string; rotatedAt: null };
+      data: { rotatedAt: Date };
+    }) => {
+      const token = this.refreshTokens.get(where.id);
+      if (!token || token.rotatedAt) return { count: 0 };
+      token.rotatedAt = data.rotatedAt;
+      return { count: 1 };
+    },
+    create: async ({
+      data,
+    }: {
+      data: { sessionId: string; tokenHash: string };
+    }) => {
+      const token: TestRefreshToken = {
+        id: randomUUID(),
+        sessionId: data.sessionId,
+        tokenHash: data.tokenHash,
+        rotatedAt: null,
+      };
+      this.refreshTokens.set(token.id, token);
+      return token;
+    },
+  };
+
   async $transaction<T>(
     callback: (transaction: InMemoryPrisma) => Promise<T>,
   ): Promise<T> {
     const users = structuredClone(this.users);
     const tokens = structuredClone(this.tokens);
+    const sessions = structuredClone(this.sessions);
+    const refreshTokens = structuredClone(this.refreshTokens);
 
     try {
       return await callback(this);
@@ -175,6 +307,11 @@ class InMemoryPrisma {
       this.tokens.clear();
       for (const [key, value] of users) this.users.set(key, value);
       for (const [key, value] of tokens) this.tokens.set(key, value);
+      this.sessions.clear();
+      this.refreshTokens.clear();
+      for (const [key, value] of sessions) this.sessions.set(key, value);
+      for (const [key, value] of refreshTokens)
+        this.refreshTokens.set(key, value);
       throw error;
     }
   }
@@ -229,6 +366,35 @@ describe('Authentication HTTP flows (e2e)', () => {
       email,
       password: 'A sufficiently strong passphrase 42',
     });
+  }
+
+  async function verifiedUser() {
+    await register().expect(202);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/verify-email')
+      .send({ token: mail.messages[0]!.token })
+      .expect(200);
+    return database.users.get('student@btu.edu.ge')!;
+  }
+
+  function login(password = 'A sufficiently strong passphrase 42') {
+    return request(app.getHttpServer()).post('/api/v1/auth/login').send({
+      email: ' STUDENT@BTU.EDU.GE ',
+      password,
+    });
+  }
+
+  function cookies(response: {
+    headers: Record<string, string | string[] | undefined>;
+  }): string[] {
+    const header = response.headers['set-cookie'];
+    return Array.isArray(header) ? header : header ? [header] : [];
+  }
+
+  function cookieValue(headers: string[], name: string): string {
+    const cookie = headers.find((item) => item.startsWith(`${name}=`));
+    expect(cookie).toBeDefined();
+    return cookie!.split(';')[0]!;
   }
 
   it('normalizes BTU email, hashes the password and token, and sends one email', async () => {
@@ -408,7 +574,200 @@ describe('Authentication HTTP flows (e2e)', () => {
         '/api/v1/auth/register',
         '/api/v1/auth/verify-email',
         '/api/v1/auth/resend-verification',
+        '/api/v1/auth/login',
+        '/api/v1/auth/refresh',
+        '/api/v1/auth/logout',
+        '/api/v1/users/me',
       ]),
     );
+    expect(response.body.paths['/api/v1/users/me'].get.security).toContainEqual(
+      { accessCookie: [] },
+    );
+    expect(
+      response.body.paths['/api/v1/auth/refresh'].post.security,
+    ).toContainEqual({ refreshCookie: [] });
+  });
+
+  it('logs in verified users, hashes tokens, and issues HttpOnly same-site cookies', async () => {
+    await verifiedUser();
+    const response = await login().expect(204);
+    expect(response.body).toEqual({});
+    expect(response.headers['cache-control']).toBe('no-store');
+    const issued = cookies(response);
+    expect(issued).toHaveLength(2);
+    expect(
+      issued.every(
+        (item) => item.includes('HttpOnly') && item.includes('SameSite=Lax'),
+      ),
+    ).toBe(true);
+    expect(issued.every((item) => !item.includes('Secure'))).toBe(true);
+    expect(issued.find((item) => item.startsWith('bcw_access='))).toContain(
+      'Path=/api/v1',
+    );
+    expect(issued.find((item) => item.startsWith('bcw_refresh='))).toContain(
+      'Path=/api/v1/auth',
+    );
+    const session = [...database.sessions.values()][0]!;
+    const refresh = [...database.refreshTokens.values()][0]!;
+    expect(session.accessTokenHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(refresh.tokenHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(session.accessTokenHash).not.toBe(
+      cookieValue(issued, 'bcw_access').split('=')[1],
+    );
+    expect(session.accessExpiresAt.getTime() - Date.now()).toBeGreaterThan(
+      14 * 60_000,
+    );
+    expect(session.expiresAt.getTime() - Date.now()).toBeGreaterThan(
+      29 * 24 * 60 * 60_000,
+    );
+  });
+
+  it('returns the same failure for wrong password, unknown user, and unverified user', async () => {
+    await register().expect(202);
+    const unverified = await login().expect(401);
+    const unknown = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        email: 'unknown@btu.edu.ge',
+        password: 'A sufficiently strong passphrase 42',
+      })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/verify-email')
+      .send({ token: mail.messages[0]!.token })
+      .expect(200);
+    const wrong = await login('wrong').expect(401);
+    const wrongDomain = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        email: 'student@example.com',
+        password: 'A sufficiently strong passphrase 42',
+      })
+      .expect(401);
+    expect(unverified.body).toEqual(unknown.body);
+    expect(wrong.body).toEqual(unknown.body);
+    expect(wrongDomain.body).toEqual(unknown.body);
+    expect(database.sessions.size).toBe(0);
+  });
+
+  it('protects /users/me and returns only safe profile fields', async () => {
+    const user = await verifiedUser();
+    await request(app.getHttpServer()).get('/api/v1/users/me').expect(401);
+    await request(app.getHttpServer())
+      .get('/api/v1/users/me')
+      .set('Cookie', 'bcw_access=invalid')
+      .expect(401);
+    await request(app.getHttpServer())
+      .get('/api/v1/users/me')
+      .set('Cookie', `bcw_access=${'A'.repeat(43)}`)
+      .expect(401);
+    const loginResponse = await login().expect(204);
+    const access = cookieValue(cookies(loginResponse), 'bcw_access');
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/users/me')
+      .set('Cookie', access)
+      .expect(200);
+    expect(response.body).toEqual({
+      id: user.id,
+      email: user.email,
+      emailVerifiedAt: user.emailVerifiedAt!.toISOString(),
+    });
+    const session = [...database.sessions.values()][0]!;
+    session.accessExpiresAt = new Date(Date.now() - 1);
+    await request(app.getHttpServer())
+      .get('/api/v1/users/me')
+      .set('Cookie', access)
+      .expect(401);
+  });
+
+  it('rotates refresh tokens and revokes the family when an old token is reused', async () => {
+    await verifiedUser();
+    const initial = await login().expect(204);
+    const oldRefresh = cookieValue(cookies(initial), 'bcw_refresh');
+    const rotated = await request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', oldRefresh)
+      .expect(204);
+    const newRefresh = cookieValue(cookies(rotated), 'bcw_refresh');
+    const newAccess = cookieValue(cookies(rotated), 'bcw_access');
+    const oldAccess = cookieValue(cookies(initial), 'bcw_access');
+    expect(newRefresh).not.toBe(oldRefresh);
+    await request(app.getHttpServer())
+      .get('/api/v1/users/me')
+      .set('Cookie', newAccess)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get('/api/v1/users/me')
+      .set('Cookie', oldAccess)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', oldRefresh)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', newRefresh)
+      .expect(401);
+    await request(app.getHttpServer())
+      .get('/api/v1/users/me')
+      .set('Cookie', newAccess)
+      .expect(401);
+  });
+
+  it('rejects missing and unknown refresh tokens without issuing cookies', async () => {
+    await request(app.getHttpServer()).post('/api/v1/auth/refresh').expect(401);
+    const unknown = await request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', `bcw_refresh=${'A'.repeat(43)}`)
+      .expect(401);
+    expect(cookies(unknown)).toHaveLength(0);
+  });
+
+  it('rejects expired and revoked sessions and logout clears cookies', async () => {
+    await verifiedUser();
+    const initial = await login().expect(204);
+    const refresh = cookieValue(cookies(initial), 'bcw_refresh');
+    const access = cookieValue(cookies(initial), 'bcw_access');
+    const session = [...database.sessions.values()][0]!;
+    session.expiresAt = new Date(Date.now() - 1);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', refresh)
+      .expect(401);
+    session.expiresAt = new Date(Date.now() + 60_000);
+    const logout = await request(app.getHttpServer())
+      .post('/api/v1/auth/logout')
+      .set('Cookie', `${refresh}; ${access}`)
+      .expect(204);
+    expect(cookies(logout)).toHaveLength(2);
+    expect(session.revokedAt).toBeInstanceOf(Date);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', refresh)
+      .expect(401);
+    await request(app.getHttpServer())
+      .get('/api/v1/users/me')
+      .set('Cookie', access)
+      .expect(401);
+  });
+
+  it('allows the trusted frontend origin and rejects hostile browser origins for mutations', async () => {
+    await verifiedUser();
+    await login()
+      .set('Origin', 'http://localhost:3000')
+      .set('Sec-Fetch-Site', 'same-site')
+      .expect(204);
+    await login()
+      .set('Origin', 'https://evil.example')
+      .set('Sec-Fetch-Site', 'cross-site')
+      .expect(403);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set('Origin', 'https://evil.example')
+      .expect(403);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/logout')
+      .set('Origin', 'https://evil.example')
+      .expect(403);
   });
 });

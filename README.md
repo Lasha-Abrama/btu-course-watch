@@ -1,6 +1,6 @@
 # BTU Course Watch
 
-Production-oriented monorepo for a BTU course availability monitoring platform. The API currently supports BTU email registration and verification; course monitoring is not implemented yet.
+Production-oriented monorepo for a BTU course availability monitoring platform. The API currently supports BTU email registration, verification, and application sessions; course monitoring is not implemented yet.
 
 ## Workspace
 
@@ -32,7 +32,7 @@ The API defaults to `http://localhost:3001`, its health endpoint is `http://loca
 
 Before registration can deliver email, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_FROM`, and `API_PUBLIC_URL` in `apps/api/.env`. Set `SMTP_USER` and `SMTP_PASSWORD` together if your SMTP server requires authentication. Docker Compose starts PostgreSQL only; it does not provide an SMTP server. Production requires HTTPS for `API_PUBLIC_URL` and TLS for SMTP.
 
-The first Prisma migration creates `User` and `EmailVerificationToken`. On an existing checkout, apply it with `pnpm --filter api exec prisma migrate deploy`. Avoid `db:push` for this tracked schema change.
+The first Prisma migration creates `User` and `EmailVerificationToken`; `20260928010000_auth_sessions` adds `AuthSession` and `RefreshToken`. On an existing checkout, apply pending migrations with `pnpm --filter api exec prisma migrate deploy`. Avoid `db:push` for tracked schema changes.
 
 ## Email verification milestone
 
@@ -41,6 +41,14 @@ The first Prisma migration creates `User` and `EmailVerificationToken`. On an ex
 Tokens expire after 24 hours. Registration duplicates and resend requests return the same accepted response regardless of account status. If SMTP delivery fails, the API logs a generic warning and the unverified user can request another token after the cooldown. There is no frontend verification page yet.
 
 Never submit BTU Classroom passwords, cookies, sessions, or authorization credentials to this platform. The registration password is solely for BTU Course Watch.
+
+## Application sessions
+
+After email verification, `POST /api/v1/auth/login` accepts the registered BTU Course Watch email and password. Successful login responds `204` and sets two host-only `HttpOnly` cookies: `bcw_access` (15 minutes, path `/api/v1`) and `bcw_refresh` (absolute 30-day session, path `/api/v1/auth`). `GET /api/v1/users/me` requires the access cookie and returns only the user ID, email, and verification timestamp. `POST /api/v1/auth/refresh` rotates both tokens, invalidates the previous access token, and does not extend the session's absolute lifetime. Reuse of a rotated refresh token revokes its entire session. `POST /api/v1/auth/logout` revokes the session and clears both cookies. Tokens are random and only their SHA-256 hashes are stored in PostgreSQL; refresh-token history is retained for reuse detection. The API does not return tokens in JSON.
+
+For local development, cookies use `SameSite=Lax` and are not `Secure` on HTTP localhost. Production cookies are always `Secure`, and both `API_PUBLIC_URL` and `CORS_ORIGIN` must use HTTPS. Set `COOKIE_SAME_SITE=none` only for a production cross-site frontend/API deployment; keep `lax` for same-site deployment. Browser clients on the separate Next.js origin must use `credentials: 'include'`. The API permits credentialed CORS only for the exact configured `CORS_ORIGIN`. Nest's cross-origin request protection rejects unsafe requests from other browser origins, including same-site sibling origins; the configured frontend origin is explicitly trusted. Do not configure a wildcard origin. A production reverse proxy must preserve the request's `Host`, `Origin`, and `Sec-Fetch-Site` headers and serve HTTPS. Cross-site deployments also depend on browser third-party-cookie policy; a same-site deployment is preferable.
+
+This session is for BTU Course Watch only. It does not accept or store BTU Classroom credentials. Login has no frontend page or extension flow yet.
 
 ## Quality commands
 

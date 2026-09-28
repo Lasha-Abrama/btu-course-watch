@@ -15,6 +15,33 @@ model User {
   createdAt              DateTime                @default(now()) @db.Timestamptz(3)
   updatedAt              DateTime                @updatedAt @db.Timestamptz(3)
   emailVerificationToken EmailVerificationToken?
+  authSessions           AuthSession[]
+}
+
+model AuthSession {
+  id              String         @id @default(uuid()) @db.Uuid
+  userId          String         @db.Uuid
+  accessTokenHash String         @unique @db.Char(64)
+  accessExpiresAt DateTime       @db.Timestamptz(3)
+  expiresAt       DateTime       @db.Timestamptz(3)
+  revokedAt       DateTime?      @db.Timestamptz(3)
+  createdAt       DateTime       @default(now()) @db.Timestamptz(3)
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens   RefreshToken[]
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id        String      @id @default(uuid()) @db.Uuid
+  sessionId String      @db.Uuid
+  tokenHash String      @unique @db.Char(64)
+  rotatedAt DateTime?   @db.Timestamptz(3)
+  createdAt DateTime    @default(now()) @db.Timestamptz(3)
+  session   AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
 }
 
 model EmailVerificationToken {
