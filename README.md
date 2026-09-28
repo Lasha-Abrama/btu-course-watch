@@ -1,6 +1,6 @@
 # BTU Course Watch
 
-Production-oriented monorepo foundation for a BTU course availability monitoring platform. Product features are intentionally out of scope at this stage.
+Production-oriented monorepo for a BTU course availability monitoring platform. The API currently supports BTU email registration and verification; course monitoring is not implemented yet.
 
 ## Workspace
 
@@ -24,13 +24,23 @@ cp .env.example .env
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 docker compose up -d
-pnpm db:generate
+pnpm --filter api exec prisma migrate deploy
 pnpm dev
 ```
 
 The API defaults to `http://localhost:3001`, its health endpoint is `http://localhost:3001/api/v1/health`, Swagger is at `http://localhost:3001/api/docs`, and the web app defaults to `http://localhost:3000`.
 
-The Prisma schema currently defines only its PostgreSQL datasource and client generator. Add migrations only when the first product domain model is designed; `pnpm db:push` is provided for deliberate local schema synchronization, not run automatically.
+Before registration can deliver email, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_FROM`, and `API_PUBLIC_URL` in `apps/api/.env`. Set `SMTP_USER` and `SMTP_PASSWORD` together if your SMTP server requires authentication. Docker Compose starts PostgreSQL only; it does not provide an SMTP server. Production requires HTTPS for `API_PUBLIC_URL` and TLS for SMTP.
+
+The first Prisma migration creates `User` and `EmailVerificationToken`. On an existing checkout, apply it with `pnpm --filter api exec prisma migrate deploy`. Avoid `db:push` for this tracked schema change.
+
+## Email verification milestone
+
+`POST /api/v1/auth/register` accepts a BTU email and a password for this platform. The email must be an ASCII address at exactly `btu.edu.ge`; surrounding whitespace is removed and the address is lowercased. Passwords need 12–128 characters with at least three character types, or a passphrase of at least 20 characters and three words of at least three characters each. The API sends a one-time token by email. Submit it as `{"token":"TOKEN_FROM_EMAIL"}` to `POST /api/v1/auth/verify-email`. `POST /api/v1/auth/resend-verification` accepts `{"email":"student@btu.edu.ge"}` after a 60-second cooldown.
+
+Tokens expire after 24 hours. Registration duplicates and resend requests return the same accepted response regardless of account status. If SMTP delivery fails, the API logs a generic warning and the unverified user can request another token after the cooldown. There is no frontend verification page yet.
+
+Never submit BTU Classroom passwords, cookies, sessions, or authorization credentials to this platform. The registration password is solely for BTU Course Watch.
 
 ## Quality commands
 
@@ -40,6 +50,7 @@ pnpm typecheck
 pnpm lint
 pnpm test
 pnpm db:validate
+pnpm --filter api exec prisma migrate status
 pnpm format
 ```
 
