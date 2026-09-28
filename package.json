@@ -1,0 +1,24 @@
+{
+  "name": "btu-course-watch",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "format": "turbo format",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck",
+    "db:generate": "pnpm --filter api prisma:generate",
+    "db:validate": "pnpm --filter api prisma:validate",
+    "db:push": "pnpm --filter api prisma:push",
+    "db:studio": "pnpm --filter api prisma:studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  }
+}

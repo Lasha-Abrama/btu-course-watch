@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "BTU Course Watch",
+  "description": "The browser companion for BTU Course Watch.",
+  "version": "0.1.0",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "BTU Course Watch"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}
