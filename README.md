@@ -8,7 +8,7 @@ Production-oriented monorepo for a BTU course availability monitoring platform. 
 - `apps/web` — Next.js TypeScript application using the App Router.
 - `apps/extension` — Chrome Manifest V3 TypeScript extension for manual, local Groups-page inspection.
 - `packages/contracts` — framework-neutral TypeScript contracts shared by applications.
-- `packages/classroom-parser` — pure, fixture-tested BTU Classroom course-page HTML parser; no live requests or extension integration.
+- `packages/classroom-parser` — pure, fixture-tested BTU Classroom course-page HTML parser, used locally by the extension.
 - `compose.yaml` — PostgreSQL for local development.
 
 ## Prerequisites
@@ -33,7 +33,7 @@ The API defaults to `http://localhost:3001`, its health endpoint is `http://loca
 
 Before registration or recovery can deliver email, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_FROM`, and the exact frontend `CORS_ORIGIN` in `apps/api/.env`. Set `SMTP_USER` and `SMTP_PASSWORD` together if your SMTP server requires authentication. Docker Compose starts PostgreSQL only; it does not provide an SMTP server. Production requires HTTPS for the API and frontend and TLS for SMTP. Set `NEXT_PUBLIC_API_URL` in `apps/web/.env.local` to the browser-reachable API `/api/v1` URL.
 
-The first Prisma migration creates `User` and `EmailVerificationToken`; `20260928010000_auth_sessions` adds `AuthSession` and `RefreshToken`; `20260928020000_google_identity` makes `User.passwordHash` nullable and adds `GoogleIdentity`; `20260929000000_password_reset` adds `PasswordResetToken`. On an existing checkout, apply pending migrations with `pnpm --filter api exec prisma migrate deploy`. Avoid `db:push` for tracked schema changes.
+The first Prisma migration creates `User` and `EmailVerificationToken`; `20260928010000_auth_sessions` adds `AuthSession` and `RefreshToken`; `20260928020000_google_identity` makes `User.passwordHash` nullable and adds `GoogleIdentity`; `20260929000000_password_reset` adds `PasswordResetToken`; `20260929010000_course_observations` adds canonical `Course`, `Group`, and `GroupStateChange` state. On an existing checkout, apply pending migrations with `pnpm --filter api exec prisma migrate deploy`. Avoid `db:push` for tracked schema changes.
 
 ## Email verification milestone
 
@@ -79,7 +79,15 @@ pnpm format
 
 ## Chrome extension
 
-Build with `pnpm --filter @btu-course-watch/extension build`, then load `apps/extension/dist` through Chrome's **Load unpacked** flow. After signing in to BTU Classroom in a normal tab, open a subject's **Groups** page and click **Inspect this page** in the popup. The extension requests only `https://classroom.btu.edu.ge/*` host access; it fetches and parses the page locally with the existing browser session, without reading or sending BTU credentials or HTML. See the [extension manual-test guide](apps/extension/README.md) for exact steps and expected error states. No monitoring or backend submission exists.
+Build with `pnpm --filter @btu-course-watch/extension build`, then load `apps/extension/dist` through Chrome's **Load unpacked** flow. After signing in to BTU Classroom in a normal tab, open a subject's **Groups** page and click **Inspect this page** in the popup. The extension requests only `https://classroom.btu.edu.ge/*` host access; it fetches and parses the page locally with the existing browser session, without reading or sending BTU credentials or HTML. See the [extension manual-test guide](apps/extension/README.md) for exact steps and expected error states. No monitoring or extension-to-API submission exists.
+
+## Structured observation ingestion (Phase 5A)
+
+`POST /api/v1/observations` accepts the existing `CourseObservation` JSON contract under the normal BTU Course Watch access cookie and trusted-origin protection. The body contains an opaque `btuCourseId`, a canonical UTC `observedAt`, nullable `courseName`, and 1–100 unique groups with IDs, names, capacities, statuses, and nullable validated BTU Choose URLs. Unknown fields, raw HTML, client-supplied user IDs, invalid URLs/timestamps, and payloads over 100 kB are rejected. A timestamp more than five minutes in the future is rejected to limit clock-skew poisoning. The API authenticates the submitting application user but does not retain their identity on shared course state. `GET /api/v1/courses/:btuCourseId` returns shared last-known course/group state and at most 20 recent discovery/status events, without user identities or Choose URLs. These endpoints are in Swagger at `/api/docs`.
+
+The backend stores one `Course` per BTU course ID and one `Group` per `(course, BTU group ID)`, plus meaningful `GroupStateChange` events. First sightings are `DISCOVERED` with no fabricated previous status. A fresh definitive status change is `STATUS_CHANGED`; identical or stale scans do not add history. Each group ignores observations at or before its `lastObservedAt`. Missing groups are left untouched. A fresh `UNKNOWN` scan advances the observation time and clears any currently exposed Choose URL, but does not replace a previously definitive `AVAILABLE`/`FULL` status; `UNKNOWN` is a valid initial state. Availability is therefore **last known**, not guaranteed live. Transactions use PostgreSQL serializable isolation, uniqueness constraints, and bounded conflict retries for simultaneous submissions. No scan log or term model is created: the second Groups-route parameter's meaning remains unconfirmed.
+
+Phase 5A intentionally leaves the extension's inspection-only behavior unchanged. Its existing Classroom permission and browser-local HTML parsing do not provide BTU Course Watch application authentication or a safe cross-origin CSRF design for API submission. Until that is designed separately, use authenticated API tests or a trusted development client to exercise ingestion. BTU passwords, cookies, sessions, authorization data, and raw HTML must remain browser-local and must never be posted to this API. The API cannot independently attest that a structured observation came from BTU; that trust boundary needs an explicit Phase 5B decision.
 
 ## Course-page parsing foundation (Phase 3)
 

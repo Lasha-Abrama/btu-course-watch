@@ -1,3 +1,5 @@
+import type { GroupAvailabilityStatus } from "./course-observation.js";
+
 /** Response returned by the API health endpoint. */
 export interface HealthResponse {
   status: "ok";
@@ -52,6 +54,39 @@ export interface ResetPasswordRequest {
 
 export interface PasswordResetResponse {
   message: "Password reset. Please sign in again.";
+}
+
+/** Counts for one accepted structured observation; no submitting-user data. */
+export interface ObservationIngestionResponse {
+  btuCourseId: string;
+  groupsCreated: number;
+  groupsUpdated: number;
+  groupsSkipped: number;
+  discoveryEventsCreated: number;
+  statusChangesCreated: number;
+}
+
+/** Shared canonical state is last-known state, not a promise of live availability. */
+export interface CanonicalCourseResponse {
+  btuCourseId: string;
+  name: string | null;
+  lastObservedAt: string;
+  groups: Array<{
+    btuGroupId: string;
+    name: string | null;
+    capacity: number | null;
+    status: GroupAvailabilityStatus;
+    firstObservedAt: string;
+    lastObservedAt: string;
+    chooseUrlPresent: boolean;
+  }>;
+  recentChanges: Array<{
+    btuGroupId: string;
+    kind: "DISCOVERED" | "STATUS_CHANGED";
+    previousStatus: GroupAvailabilityStatus | null;
+    status: GroupAvailabilityStatus;
+    observedAt: string;
+  }>;
 }
 
 export {
