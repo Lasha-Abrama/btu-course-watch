@@ -69,6 +69,21 @@ describe("BTU Classroom course page parser", () => {
     ).toBe(true);
   });
 
+  it("distinguishes quota-full from selection-disabled controls in the same row structure", () => {
+    expect(
+      scan("selection-disabled").groups.map(
+        ({ btuGroupId, status, chooseUrl }) => ({
+          btuGroupId,
+          status,
+          chooseUrl,
+        }),
+      ),
+    ).toEqual([
+      { btuGroupId: "20001", status: "UNKNOWN", chooseUrl: null },
+      { btuGroupId: "20002", status: "FULL", chooseUrl: null },
+    ]);
+  });
+
   it("recognizes the same group ID becoming available only from the new exposed URL", () => {
     const before = scan("all-full").groups.find(
       (group) => group.btuGroupId === "13435",
@@ -203,7 +218,7 @@ describe("BTU Classroom course page parser", () => {
 
   it("keeps an ambiguous group isolated from an unambiguous neighboring group", () => {
     const html =
-      '<table><tr><td><a class="group_title" data-id="1">ჯგუფი 1 - (20)</a></td><td><a class="btn btn-primary chooseGroup" data-type="choose" data-href="https://classroom.btu.edu.ge/ge/student/me/choose/50"></a><a class="btn btn-default chooseGroup" disabled></a></td></tr><tr><td><a class="group_title" data-id="2">ჯგუფი 2 - (20)</a></td><td><a class="btn btn-default chooseGroup" disabled></a></td></tr></table>';
+      '<table><tr><td><a class="group_title" data-id="1">ჯგუფი 1 - (20)</a></td><td><a class="btn btn-primary chooseGroup" data-type="choose" data-href="https://classroom.btu.edu.ge/ge/student/me/choose/50"></a><a class="btn btn-default chooseGroup" disabled></a></td></tr><tr><td><a class="group_title" data-id="2">ჯგუფი 2 - (20)</a></td><td><a class="btn btn-default chooseGroup" disabled data-msg="ჯგუფში კვოტა შევსებულია"></a></td></tr></table>';
     expect(parseCoursePage(html, context).groups).toMatchObject([
       { btuGroupId: "1", status: "UNKNOWN", chooseUrl: null },
       { btuGroupId: "2", status: "FULL", chooseUrl: null },

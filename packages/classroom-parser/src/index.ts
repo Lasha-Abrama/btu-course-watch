@@ -94,7 +94,13 @@ function groupAction(
     hasClass(control, "disabled");
   const exposedUrl = control.attribs["data-href"]?.trim() || null;
 
-  if (disabled && hasClass(control, "btn-default") && !exposedUrl) {
+  if (
+    disabled &&
+    hasClass(control, "btn-default") &&
+    !exposedUrl &&
+    readableText(control.attribs["data-msg"] ?? "") ===
+      "ჯგუფში კვოტა შევსებულია"
+  ) {
     return { status: "FULL", chooseUrl: null };
   }
   if (
