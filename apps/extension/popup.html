@@ -9,8 +9,17 @@
   <body>
     <main>
       <p class="eyebrow">BTU Course Watch</p>
-      <h1>Extension ready</h1>
-      <p id="status">Course monitoring will be added in a future release.</p>
+      <h1>Inspect Groups</h1>
+      <p class="intro">
+        Open a BTU Classroom subject’s Groups tab, then inspect its current
+        groups locally.
+      </p>
+      <button id="inspect" type="button">Inspect this page</button>
+      <p id="status" role="status" aria-live="polite">No page inspected yet.</p>
+      <section id="results" aria-label="Course observation" hidden>
+        <p id="summary"></p>
+        <ul id="groups"></ul>
+      </section>
     </main>
   </body>
 </html>

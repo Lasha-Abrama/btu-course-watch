@@ -11,6 +11,10 @@
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@btu-course-watch/classroom-parser": "workspace:*",
+    "@btu-course-watch/contracts": "workspace:*"
+  },
   "devDependencies": {
     "@types/chrome": "^0.1.0",
     "@types/node": "^24.0.0",

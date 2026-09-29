@@ -6,7 +6,7 @@ Production-oriented monorepo for a BTU course availability monitoring platform. 
 
 - `apps/api` — NestJS 12 ESM API; application routes live under `/api/v1` and Swagger is served at `/api/docs`.
 - `apps/web` — Next.js TypeScript application using the App Router.
-- `apps/extension` — minimal Chrome Manifest V3 TypeScript extension.
+- `apps/extension` — Chrome Manifest V3 TypeScript extension for manual, local Groups-page inspection.
 - `packages/contracts` — framework-neutral TypeScript contracts shared by applications.
 - `packages/classroom-parser` — pure, fixture-tested BTU Classroom course-page HTML parser; no live requests or extension integration.
 - `compose.yaml` — PostgreSQL for local development.
@@ -79,10 +79,8 @@ pnpm format
 
 ## Chrome extension
 
-Build with `pnpm --filter @btu-course-watch/extension build`, open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select `apps/extension/dist`.
-
-The extension requests no host permissions and contains only a popup plus a minimal module service worker.
+Build with `pnpm --filter @btu-course-watch/extension build`, then load `apps/extension/dist` through Chrome's **Load unpacked** flow. After signing in to BTU Classroom in a normal tab, open a subject's **Groups** page and click **Inspect this page** in the popup. The extension requests only `https://classroom.btu.edu.ge/*` host access; it fetches and parses the page locally with the existing browser session, without reading or sending BTU credentials or HTML. See the [extension manual-test guide](apps/extension/README.md) for exact steps and expected error states. No monitoring or backend submission exists.
 
 ## Course-page parsing foundation (Phase 3)
 
-The shared `CourseObservation` contract represents a caller-timestamped scan with BTU course/group IDs, nullable course name, group name/capacity, availability status, and a nullable, DOM-exposed Choose URL. `packages/classroom-parser` parses already-obtained HTML without credentials, network calls, browser globals, or backend state. It does not store HTML, navigate to Choose URLs, or implement monitoring. Its sanitized fixtures cover full, available, unknown, malformed, and newly appearing groups. See [parser assumptions and unsupported markup](packages/classroom-parser/README.md) before extending it or integrating the Chrome extension. BTU Classroom credentials and sessions must remain in the student's browser.
+The shared `CourseObservation` contract represents a caller-timestamped scan with BTU course/group IDs, nullable course name, group name/capacity, availability status, and a nullable, DOM-exposed Choose URL. `packages/classroom-parser` parses already-obtained HTML without credentials, network calls, browser globals, or backend state. It does not store HTML, navigate to Choose URLs, or implement monitoring. Its sanitized fixtures cover full, available, unknown, malformed, and newly appearing groups. The Chrome extension now uses this parser only for the confirmed `/ge/student/me/course/groups/{btuCourseId}/{opaqueRouteParam}` route; the second parameter's meaning remains unknown. See [parser assumptions and unsupported markup](packages/classroom-parser/README.md). BTU Classroom credentials and sessions must remain in the student's browser.

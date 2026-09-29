@@ -4,7 +4,8 @@
 }
 
 body {
-  min-width: 20rem;
+  min-width: 22rem;
+  max-width: 28rem;
   margin: 0;
   background: #f4f7fb;
   color: #13213a;
@@ -28,8 +29,61 @@ h1 {
   font-size: 1.5rem;
 }
 
+.intro {
+  margin: 0.75rem 0 1rem;
+  line-height: 1.45;
+}
+
+button {
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.9rem;
+  background: #2458d6;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+button:focus-visible {
+  outline: 3px solid #13213a;
+  outline-offset: 2px;
+}
+
 #status {
   margin: 0.75rem 0 0;
   color: #52627a;
   line-height: 1.5;
+}
+
+#summary {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+#groups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 19rem;
+  overflow-y: auto;
+}
+
+#groups li {
+  display: grid;
+  gap: 0.3rem;
+  border-top: 1px solid #d5dce8;
+  padding: 0.65rem 0;
+  line-height: 1.4;
+}
+
+#groups span {
+  color: #52627a;
+  font-size: 0.85rem;
 }

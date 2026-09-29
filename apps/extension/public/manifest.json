@@ -3,6 +3,7 @@
   "name": "BTU Course Watch",
   "description": "The browser companion for BTU Course Watch.",
   "version": "0.1.0",
+  "host_permissions": ["https://classroom.btu.edu.ge/*"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "BTU Course Watch"
