@@ -30,7 +30,10 @@ describe('Google OAuth HTTP flow (e2e)', () => {
         authSession: { create: sessionCreate },
       })
       .overrideProvider(MAIL_SENDER)
-      .useValue({ sendEmailVerification: () => Promise.resolve() });
+      .useValue({
+        sendEmailVerification: () => Promise.resolve(),
+        sendPasswordReset: () => Promise.resolve(),
+      });
 
     if (withVerifiedGoogleGuard) {
       builder.overrideGuard(GoogleOAuthGuard).useValue({

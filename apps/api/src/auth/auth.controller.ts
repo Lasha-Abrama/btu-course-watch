@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Header,
   HttpCode,
   HttpStatus,
   Post,
@@ -26,12 +27,17 @@ import {
 import type {
   AuthAcceptedResponse,
   EmailVerifiedResponse,
+  PasswordResetAcceptedResponse,
+  PasswordResetResponse,
 } from '@btu-course-watch/contracts';
 import { AuthService } from './auth.service.js';
+import { PasswordResetService } from './password-reset.service.js';
 import {
+  forgotPasswordSchema,
   registrationSchema,
   loginSchema,
   resendVerificationSchema,
+  resetPasswordSchema,
   verifyEmailSchema,
 } from './auth.validation.js';
 import {
@@ -44,12 +50,16 @@ import { SessionService } from './session.service.js';
 const ACCEPTED_RESPONSE = {
   message: 'If eligible, a verification email will be sent.',
 } as const satisfies AuthAcceptedResponse;
+const RESET_ACCEPTED_RESPONSE = {
+  message: 'If eligible, a password reset email will be sent.',
+} as const satisfies PasswordResetAcceptedResponse;
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly passwordReset: PasswordResetService,
     private readonly sessions: SessionService,
     private readonly config: ConfigService,
   ) {}
@@ -237,5 +247,90 @@ export class AuthController {
 
     await this.authService.resendVerification(result.data.email);
     return ACCEPTED_RESPONSE;
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({
+    summary: 'Request a password reset email',
+    description:
+      'The response does not disclose whether a local-password account exists. Eligible verified accounts receive a 30-minute one-time link; requests are limited to one email per minute per account.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['email'],
+      additionalProperties: false,
+      properties: {
+        email: {
+          type: 'string',
+          format: 'email',
+          example: 'student@btu.edu.ge',
+        },
+      },
+    },
+  })
+  @ApiAcceptedResponse({
+    description: 'Accepted without disclosing account status.',
+    schema: { example: RESET_ACCEPTED_RESPONSE },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid BTU email.' })
+  @ApiForbiddenResponse({ description: 'Request origin is not permitted.' })
+  async forgotPassword(
+    @Body() body: unknown,
+  ): Promise<PasswordResetAcceptedResponse> {
+    const result = forgotPasswordSchema.safeParse(body);
+    if (!result.success) throw new BadRequestException('Invalid BTU email');
+    await this.passwordReset.requestReset(result.data.email);
+    return RESET_ACCEPTED_RESPONSE;
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({
+    summary: 'Set a new password using a one-time reset token',
+    description:
+      'Consumes the token and revokes every application session for the user. Sign in again afterward.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['token', 'password'],
+      additionalProperties: false,
+      properties: {
+        token: {
+          type: 'string',
+          description: 'One-time token from the reset email.',
+        },
+        password: {
+          type: 'string',
+          format: 'password',
+          minLength: 12,
+          maxLength: 128,
+          description:
+            'Use 12–128 characters with three character types, or a passphrase of at least 20 characters and three words of at least three characters each.',
+        },
+      },
+    },
+  })
+  @ApiOkResponse({
+    description: 'Password changed; all previous sessions revoked.',
+    schema: { example: { message: 'Password reset. Please sign in again.' } },
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid, expired, or used token, or password fails policy.',
+  })
+  @ApiForbiddenResponse({ description: 'Request origin is not permitted.' })
+  async resetPassword(@Body() body: unknown): Promise<PasswordResetResponse> {
+    const result = resetPasswordSchema.safeParse(body);
+    if (!result.success)
+      throw new BadRequestException('Invalid reset token or password');
+    await this.passwordReset.resetPassword(
+      result.data.token,
+      result.data.password,
+    );
+    return { message: 'Password reset. Please sign in again.' };
   }
 }

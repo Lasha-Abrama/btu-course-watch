@@ -8,4 +8,5 @@ export interface VerificationMessage {
 
 export interface MailSender {
   sendEmailVerification(message: VerificationMessage): Promise<void>;
+  sendPasswordReset(message: VerificationMessage): Promise<void>;
 }

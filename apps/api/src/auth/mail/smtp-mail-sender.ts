@@ -7,7 +7,7 @@ import type { MailSender, VerificationMessage } from './mail-sender.js';
 export class SmtpMailSender implements MailSender {
   private readonly transporter: Transporter;
   private readonly sender: string;
-  private readonly verificationEndpoint: string;
+  private readonly frontendOrigin: string;
 
   constructor(config: ConfigService) {
     const username = config.get<string>('SMTP_USER');
@@ -30,10 +30,17 @@ export class SmtpMailSender implements MailSender {
       disableUrlAccess: true,
     });
     this.sender = config.getOrThrow<string>('SMTP_FROM');
-    this.verificationEndpoint = new URL(
-      '/api/v1/auth/verify-email',
-      config.getOrThrow<string>('API_PUBLIC_URL'),
-    ).toString();
+    this.frontendOrigin = config.getOrThrow<string>('CORS_ORIGIN');
+  }
+
+  private link(
+    path: '/verify-email' | '/reset-password',
+    token: string,
+  ): string {
+    // URL fragments are never sent to the frontend server in HTTP requests.
+    const destination = new URL(path, this.frontendOrigin);
+    destination.hash = new URLSearchParams({ token }).toString();
+    return destination.toString();
   }
 
   async sendEmailVerification({
@@ -46,12 +53,30 @@ export class SmtpMailSender implements MailSender {
       to,
       subject: 'Verify your BTU Course Watch email',
       text: [
-        'Use this one-time token to verify your BTU Course Watch email:',
-        token,
+        'Verify your BTU Course Watch email using this one-time link:',
+        this.link('/verify-email', token),
         '',
-        `Submit it as JSON {"token":"..."} to POST ${this.verificationEndpoint}.`,
         `It expires at ${expiresAt.toISOString()}.`,
         'If you did not register, you can ignore this message.',
+      ].join('\n'),
+    });
+  }
+
+  async sendPasswordReset({
+    to,
+    token,
+    expiresAt,
+  }: VerificationMessage): Promise<void> {
+    await this.transporter.sendMail({
+      from: this.sender,
+      to,
+      subject: 'Reset your BTU Course Watch password',
+      text: [
+        'Reset your BTU Course Watch password using this one-time link:',
+        this.link('/reset-password', token),
+        '',
+        `It expires at ${expiresAt.toISOString()}.`,
+        'If you did not request this, you can ignore this message. Your password has not changed.',
       ].join('\n'),
     });
   }

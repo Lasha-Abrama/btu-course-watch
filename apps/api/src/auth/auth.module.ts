@@ -12,12 +12,14 @@ import { GoogleIdentityService } from './google-identity.service.js';
 import { GoogleOAuthGuard } from './google-oauth.guard.js';
 import { GoogleOAuthStateStore } from './google-oauth-state.store.js';
 import { GoogleStrategy } from './google.strategy.js';
+import { PasswordResetService } from './password-reset.service.js';
 
 @Module({
   imports: [PassportModule.register({ session: false })],
   controllers: [AuthController, GoogleController, UsersController],
   providers: [
     AuthService,
+    PasswordResetService,
     SessionService,
     SessionGuard,
     GoogleIdentityService,

@@ -22,6 +22,7 @@ describe('SmtpMailSender', () => {
   it('uses validated SMTP settings and sends the token only through email', async () => {
     const config = new ConfigService({
       API_PUBLIC_URL: 'https://api.example.test',
+      CORS_ORIGIN: 'https://watch.example.test',
       NODE_ENV: 'production',
       SMTP_HOST: 'smtp.example.test',
       SMTP_PORT: 587,
@@ -58,7 +59,24 @@ describe('SmtpMailSender', () => {
       }),
     );
     expect(smtp.sendMail.mock.calls[0]?.[0].text).toContain(
-      'https://api.example.test/api/v1/auth/verify-email',
+      'https://watch.example.test/verify-email#token=one-time-token',
+    );
+    expect(smtp.sendMail.mock.calls[0]?.[0].text).not.toContain(
+      'api.example.test',
+    );
+
+    await sender.sendPasswordReset({
+      to: 'student@btu.edu.ge',
+      token: 'reset-token',
+      expiresAt,
+    });
+    expect(smtp.sendMail.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        subject: 'Reset your BTU Course Watch password',
+        text: expect.stringContaining(
+          'https://watch.example.test/reset-password#token=reset-token',
+        ),
+      }),
     );
   });
 });

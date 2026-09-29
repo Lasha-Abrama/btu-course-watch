@@ -48,6 +48,7 @@ interface TestRefreshToken {
 class InMemoryPrisma {
   readonly users = new Map<string, TestUser>();
   readonly tokens = new Map<string, TestToken>();
+  readonly resetTokens = new Map<string, TestToken>();
   readonly sessions = new Map<string, TestSession>();
   readonly refreshTokens = new Map<string, TestRefreshToken>();
 
@@ -94,7 +95,22 @@ class InMemoryPrisma {
       return {
         ...user,
         emailVerificationToken: this.tokens.get(user.id) ?? null,
+        passwordResetToken: this.resetTokens.get(user.id) ?? null,
       };
+    },
+    update: async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: { passwordHash: string };
+    }) => {
+      const user = [...this.users.values()].find(
+        (item) => item.id === where.id,
+      );
+      if (!user) throw new Error('Missing test user');
+      user.passwordHash = data.passwordHash;
+      return user;
     },
     updateMany: async ({
       where,
@@ -180,6 +196,76 @@ class InMemoryPrisma {
     },
   };
 
+  readonly passwordResetToken = {
+    findUnique: async ({ where }: { where: { tokenHash: string } }) => {
+      const record = [...this.resetTokens.values()].find(
+        (item) => item.tokenHash === where.tokenHash,
+      );
+      if (!record) return null;
+      const user = [...this.users.values()].find(
+        (item) => item.id === record.userId,
+      );
+      return { ...record, user };
+    },
+    updateMany: async ({
+      where,
+      data,
+    }: {
+      where: {
+        id: string;
+        tokenHash: string;
+        consumedAt: null;
+        expiresAt: { gt: Date };
+      };
+      data: { consumedAt: Date };
+    }) => {
+      const record = [...this.resetTokens.values()].find(
+        (item) => item.id === where.id,
+      );
+      if (
+        !record ||
+        record.tokenHash !== where.tokenHash ||
+        record.consumedAt ||
+        record.expiresAt <= where.expiresAt.gt
+      )
+        return { count: 0 };
+      record.consumedAt = data.consumedAt;
+      return { count: 1 };
+    },
+    upsert: async ({
+      where,
+      create,
+      update,
+    }: {
+      where: { userId: string };
+      create: {
+        userId: string;
+        tokenHash: string;
+        expiresAt: Date;
+        sentAt: Date;
+      };
+      update: {
+        tokenHash: string;
+        expiresAt: Date;
+        consumedAt: null;
+        sentAt: Date;
+      };
+    }) => {
+      const existing = this.resetTokens.get(where.userId);
+      if (existing) {
+        Object.assign(existing, update);
+        return existing;
+      }
+      const record: TestToken = {
+        id: randomUUID(),
+        ...create,
+        consumedAt: null,
+      };
+      this.resetTokens.set(where.userId, record);
+      return record;
+    },
+  };
+
   readonly authSession = {
     create: async ({
       data,
@@ -226,6 +312,7 @@ class InMemoryPrisma {
     }: {
       where: {
         id?: string;
+        userId?: string;
         accessTokenHash?: string;
         revokedAt: null;
         expiresAt?: { gt: Date };
@@ -236,19 +323,24 @@ class InMemoryPrisma {
         accessExpiresAt?: Date;
       };
     }) => {
-      const session = [...this.sessions.values()].find((item) =>
+      const matches = [...this.sessions.values()].filter((item) =>
         where.id
           ? item.id === where.id
-          : item.accessTokenHash === where.accessTokenHash,
+          : where.userId
+            ? item.userId === where.userId
+            : item.accessTokenHash === where.accessTokenHash,
       );
-      if (
-        !session ||
-        session.revokedAt ||
-        (where.expiresAt && session.expiresAt <= where.expiresAt.gt)
-      )
-        return { count: 0 };
-      Object.assign(session, data);
-      return { count: 1 };
+      let count = 0;
+      for (const session of matches) {
+        if (
+          session.revokedAt ||
+          (where.expiresAt && session.expiresAt <= where.expiresAt.gt)
+        )
+          continue;
+        Object.assign(session, data);
+        count++;
+      }
+      return { count };
     },
   };
 
@@ -297,6 +389,7 @@ class InMemoryPrisma {
   ): Promise<T> {
     const users = structuredClone(this.users);
     const tokens = structuredClone(this.tokens);
+    const resetTokens = structuredClone(this.resetTokens);
     const sessions = structuredClone(this.sessions);
     const refreshTokens = structuredClone(this.refreshTokens);
 
@@ -305,8 +398,10 @@ class InMemoryPrisma {
     } catch (error) {
       this.users.clear();
       this.tokens.clear();
+      this.resetTokens.clear();
       for (const [key, value] of users) this.users.set(key, value);
       for (const [key, value] of tokens) this.tokens.set(key, value);
+      for (const [key, value] of resetTokens) this.resetTokens.set(key, value);
       this.sessions.clear();
       this.refreshTokens.clear();
       for (const [key, value] of sessions) this.sessions.set(key, value);
@@ -327,11 +422,16 @@ class InMemoryPrisma {
 
 class TestMailSender {
   readonly messages: VerificationMessage[] = [];
+  readonly resetMessages: VerificationMessage[] = [];
   fail = false;
 
   async sendEmailVerification(message: VerificationMessage): Promise<void> {
     if (this.fail) throw new Error('SMTP unavailable');
     this.messages.push(message);
+  }
+  async sendPasswordReset(message: VerificationMessage): Promise<void> {
+    if (this.fail) throw new Error('SMTP unavailable');
+    this.resetMessages.push(message);
   }
 }
 
@@ -564,7 +664,7 @@ describe('Authentication HTTP flows (e2e)', () => {
     expect(mail.messages).toHaveLength(1);
   });
 
-  it('publishes the three authentication routes in OpenAPI', async () => {
+  it('publishes authentication and recovery routes in OpenAPI', async () => {
     const response = await request(app.getHttpServer())
       .get('/api/docs/openapi.json')
       .expect(200);
@@ -577,6 +677,8 @@ describe('Authentication HTTP flows (e2e)', () => {
         '/api/v1/auth/login',
         '/api/v1/auth/refresh',
         '/api/v1/auth/logout',
+        '/api/v1/auth/forgot-password',
+        '/api/v1/auth/reset-password',
         '/api/v1/users/me',
       ]),
     );
@@ -778,6 +880,139 @@ describe('Authentication HTTP flows (e2e)', () => {
       .expect(403);
     await request(app.getHttpServer())
       .post('/api/v1/auth/logout')
+      .set('Origin', 'https://evil.example')
+      .expect(403);
+  });
+
+  function forgot(email = ' STUDENT@BTU.EDU.GE ') {
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/forgot-password')
+      .send({ email });
+  }
+
+  function reset(
+    token: string,
+    password = 'A new sufficiently strong passphrase 84',
+  ) {
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/reset-password')
+      .send({ token, password });
+  }
+
+  it('returns the same forgot response for unknown, Google-only, unverified, and eligible accounts', async () => {
+    const unknown = await forgot('unknown@btu.edu.ge').expect(202);
+    await register().expect(202);
+    const unverified = await forgot().expect(202);
+    const google = 'google@btu.edu.ge';
+    database.users.set(google, {
+      id: randomUUID(),
+      email: google,
+      passwordHash: null,
+      emailVerifiedAt: new Date(),
+    });
+    const googleOnly = await forgot(google).expect(202);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/verify-email')
+      .send({ token: mail.messages[0]!.token })
+      .expect(200);
+    const eligible = await forgot().expect(202);
+    expect(unverified.body).toEqual(unknown.body);
+    expect(googleOnly.body).toEqual(unknown.body);
+    expect(eligible.body).toEqual(unknown.body);
+    expect(mail.resetMessages).toHaveLength(1);
+    expect(mail.resetMessages[0]!.to).toBe('student@btu.edu.ge');
+    expect(database.resetTokens.size).toBe(1);
+  });
+
+  it('stores only a token hash, enforces expiry and single use, and hashes the new password', async () => {
+    const user = await verifiedUser();
+    await forgot().expect(202);
+    const token = mail.resetMessages[0]!.token;
+    const record = database.resetTokens.get(user.id)!;
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(record.tokenHash).toBe(
+      createHash('sha256').update(token).digest('hex'),
+    );
+    expect(record.tokenHash).not.toBe(token);
+    expect(record.expiresAt.getTime() - Date.now()).toBeGreaterThan(
+      29 * 60_000,
+    );
+    await reset('A'.repeat(43)).expect(400);
+    database.resetTokens.get(user.id)!.expiresAt = new Date(Date.now() - 1);
+    await reset(token).expect(400);
+    database.resetTokens.get(user.id)!.expiresAt = new Date(
+      Date.now() + 60_000,
+    );
+    const before = database.users.get(user.email)!.passwordHash;
+    await reset(token).expect(200);
+    expect(database.resetTokens.get(user.id)!.consumedAt).toBeInstanceOf(Date);
+    const newHash = database.users.get(user.email)!.passwordHash!;
+    expect(newHash).not.toBe(before);
+    expect(newHash).toMatch(/^\$argon2id\$/);
+    expect(
+      await argon2.verify(newHash, 'A new sufficiently strong passphrase 84'),
+    ).toBe(true);
+    await reset(token).expect(400);
+    await login().expect(401);
+    await login('A new sufficiently strong passphrase 84').expect(204);
+  });
+
+  it('rejects weak new passwords without consuming the token', async () => {
+    const user = await verifiedUser();
+    await forgot().expect(202);
+    const token = mail.resetMessages[0]!.token;
+    await reset(token, 'password123').expect(400);
+    expect(database.resetTokens.get(user.id)?.consumedAt).toBeNull();
+    await reset(token).expect(200);
+  });
+
+  it('rate-limits reset email and replaces the previous token after cooldown', async () => {
+    const user = await verifiedUser();
+    await forgot().expect(202);
+    const first = mail.resetMessages[0]!.token;
+    await forgot().expect(202);
+    expect(mail.resetMessages).toHaveLength(1);
+    database.resetTokens.get(user.id)!.sentAt = new Date(Date.now() - 61_000);
+    await forgot().expect(202);
+    expect(mail.resetMessages).toHaveLength(2);
+    expect(mail.resetMessages[1]!.token).not.toBe(first);
+    await reset(first).expect(400);
+    await reset(mail.resetMessages[1]!.token).expect(200);
+  });
+
+  it('revokes every existing access and refresh session after a successful reset', async () => {
+    await verifiedUser();
+    const first = await login().expect(204);
+    const second = await login().expect(204);
+    await forgot().expect(202);
+    await reset(mail.resetMessages[0]!.token).expect(200);
+    for (const issued of [first, second]) {
+      await request(app.getHttpServer())
+        .get('/api/v1/users/me')
+        .set('Cookie', cookieValue(cookies(issued), 'bcw_access'))
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', cookieValue(cookies(issued), 'bcw_refresh'))
+        .expect(401);
+    }
+    expect(
+      [...database.sessions.values()].every(
+        (session) => session.revokedAt instanceof Date,
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps SMTP failures private and rejects hostile origins on recovery endpoints', async () => {
+    await verifiedUser();
+    mail.fail = true;
+    const accepted = await forgot().expect(202);
+    expect(accepted.body).toEqual({
+      message: 'If eligible, a password reset email will be sent.',
+    });
+    expect(mail.resetMessages).toHaveLength(0);
+    await forgot().set('Origin', 'https://evil.example').expect(403);
+    await reset('A'.repeat(43))
       .set('Origin', 'https://evil.example')
       .expect(403);
   });

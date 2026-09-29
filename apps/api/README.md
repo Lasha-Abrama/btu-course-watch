@@ -10,9 +10,10 @@ Copy `.env.example` to `.env`, configure an SMTP server, start the repository Po
 - Registration: `POST /api/v1/auth/register`
 - Email verification: `POST /api/v1/auth/verify-email`
 - Resend verification: `POST /api/v1/auth/resend-verification`
+- Password recovery: `POST /api/v1/auth/forgot-password`, `POST /api/v1/auth/reset-password`
 - Password login: `POST /api/v1/auth/login`
 - Google sign-in: `GET /api/v1/auth/google` (callback: `GET /api/v1/auth/google/callback`)
 - Session renewal/logout: `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout`
 - Current user: `GET /api/v1/users/me`
 
-The Prisma models are limited to users, email verification, application sessions, and Google identity. Tokens are delivered by email because no frontend verification page exists. `SMTP_USER` and `SMTP_PASSWORD` are optional as a pair for unauthenticated local SMTP servers. Docker Compose does not start an SMTP server. Configure the Google Cloud OAuth Web client and all four `GOOGLE_*` variables as described in the root README before starting the API.
+The Prisma models are limited to users, email verification, password reset, application sessions, and Google identity. Verification and reset emails link to the frontend origin configured by `CORS_ORIGIN`. `SMTP_USER` and `SMTP_PASSWORD` are optional as a pair for unauthenticated local SMTP servers. Docker Compose does not start an SMTP server. Configure the Google Cloud OAuth Web client and all four `GOOGLE_*` variables as described in the root README before starting the API.

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import { AuthSessionProvider } from "../components/auth-session";
 
 export const metadata: Metadata = {
   title: "BTU Course Watch",
-  description: "Monitor BTU course availability.",
+  description:
+    "Your BTU Course Watch account. Course availability monitoring is on its way.",
 };
 
 export default function RootLayout({
@@ -12,7 +14,9 @@ export default function RootLayout({
 }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthSessionProvider>{children}</AuthSessionProvider>
+      </body>
     </html>
   );
 }

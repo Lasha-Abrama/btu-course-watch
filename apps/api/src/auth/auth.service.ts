@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MAIL_SENDER, type MailSender } from './mail/mail-sender.js';
+import { hashPassword } from './password.js';
 import { SessionService, type SessionTokens } from './session.service.js';
 
 const TOKEN_LIFETIME_MS = 24 * 60 * 60 * 1_000;
@@ -60,12 +61,7 @@ export class AuthService {
   }
 
   async register(email: string, password: string): Promise<void> {
-    const passwordHash = await argon2.hash(password, {
-      type: argon2.argon2id,
-      memoryCost: 19_456,
-      timeCost: 2,
-      parallelism: 1,
-    });
+    const passwordHash = await hashPassword(password);
     const { token, tokenHash } = createVerificationToken();
     const expiresAt = new Date(Date.now() + TOKEN_LIFETIME_MS);
 

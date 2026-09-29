@@ -10,7 +10,7 @@ export const btuEmailSchema = z
       .regex(/^[\x21-\x7e]+@btu\.edu\.ge$/),
   );
 
-const passwordSchema = z
+export const passwordSchema = z
   .string()
   .min(12)
   .max(128)
@@ -50,4 +50,13 @@ export const resendVerificationSchema = z.strictObject({
 
 export const verifyEmailSchema = z.strictObject({
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+});
+
+export const forgotPasswordSchema = z.strictObject({
+  email: btuEmailSchema,
+});
+
+export const resetPasswordSchema = z.strictObject({
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  password: passwordSchema,
 });

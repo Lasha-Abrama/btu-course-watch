@@ -36,3 +36,20 @@ export interface CurrentUserResponse {
   email: string;
   emailVerifiedAt: string;
 }
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface PasswordResetAcceptedResponse {
+  message: "If eligible, a password reset email will be sent.";
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
+}
+
+export interface PasswordResetResponse {
+  message: "Password reset. Please sign in again.";
+}
