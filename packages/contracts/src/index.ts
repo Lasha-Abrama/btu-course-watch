@@ -53,3 +53,11 @@ export interface ResetPasswordRequest {
 export interface PasswordResetResponse {
   message: "Password reset. Please sign in again.";
 }
+
+export {
+  assertCourseObservation,
+  isBtuChooseUrl,
+  type CourseObservation,
+  type GroupObservation,
+  type GroupAvailabilityStatus,
+} from "./course-observation.js";

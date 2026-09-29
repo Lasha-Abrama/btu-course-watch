@@ -8,6 +8,7 @@ Production-oriented monorepo for a BTU course availability monitoring platform. 
 - `apps/web` — Next.js TypeScript application using the App Router.
 - `apps/extension` — minimal Chrome Manifest V3 TypeScript extension.
 - `packages/contracts` — framework-neutral TypeScript contracts shared by applications.
+- `packages/classroom-parser` — pure, fixture-tested BTU Classroom course-page HTML parser; no live requests or extension integration.
 - `compose.yaml` — PostgreSQL for local development.
 
 ## Prerequisites
@@ -81,3 +82,7 @@ pnpm format
 Build with `pnpm --filter @btu-course-watch/extension build`, open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select `apps/extension/dist`.
 
 The extension requests no host permissions and contains only a popup plus a minimal module service worker.
+
+## Course-page parsing foundation (Phase 3)
+
+The shared `CourseObservation` contract represents a caller-timestamped scan with BTU course/group IDs, nullable course name, group name/capacity, availability status, and a nullable, DOM-exposed Choose URL. `packages/classroom-parser` parses already-obtained HTML without credentials, network calls, browser globals, or backend state. It does not store HTML, navigate to Choose URLs, or implement monitoring. Its sanitized fixtures cover full, available, unknown, malformed, and newly appearing groups. See [parser assumptions and unsupported markup](packages/classroom-parser/README.md) before extending it or integrating the Chrome extension. BTU Classroom credentials and sessions must remain in the student's browser.
