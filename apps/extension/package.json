@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build --mode development",
+    "build:production": "vite build --mode production",
     "dev": "vite build --watch --mode development",
-    "format": "prettier --write \"src/**/*.{ts,css,html}\" \"*.{ts,json,html}\" \"public/*.json\"",
+    "format": "prettier --write \"src/**/*.{ts,css,html}\" \"*.{ts,json,html}\"",
     "lint": "oxlint --type-aware src/ vite.config.ts",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"

@@ -6,6 +6,38 @@
   --blue: #2463e6;
   --line: #dae3ef;
 }
+.extension-panel {
+  display: grid;
+  gap: 0.8rem;
+  margin: 1.5rem 0;
+}
+.extension-panel p {
+  margin: 0;
+  line-height: 1.55;
+}
+.extension-panel .primary-button,
+.extension-panel .secondary-button {
+  width: fit-content;
+}
+.pairing-code {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: var(--navy);
+}
+.extension-authorizations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.extension-authorizations li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--line);
+  padding: 0.8rem 0;
+}
 * {
   box-sizing: border-box;
 }

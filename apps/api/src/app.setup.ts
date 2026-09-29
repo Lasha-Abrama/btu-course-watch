@@ -1,4 +1,4 @@
-import type { INestApplication } from '@nestjs/common';
+import { RequestMethod, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
@@ -13,6 +13,15 @@ export function configureApplication(
   });
   app.enableCsrfProtection({
     trustedOrigins: [config.getOrThrow<string>('CORS_ORIGIN')],
+    // These exact routes accept no web cookies and require an extension verifier/bearer.
+    exclude: [
+      { path: 'extension/link-requests', method: RequestMethod.POST },
+      {
+        path: 'extension/link-requests/:requestId/exchange',
+        method: RequestMethod.POST,
+      },
+      { path: 'extension/observations', method: RequestMethod.POST },
+    ],
   });
   app.enableShutdownHooks();
 
@@ -31,6 +40,14 @@ export function configureApplication(
       'bcw_refresh',
       { type: 'apiKey', in: 'cookie', name: 'bcw_refresh' },
       'refreshCookie',
+    )
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'opaque extension credential',
+      },
+      'extensionCredential',
     )
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);

@@ -29,5 +29,6 @@ import { PasswordResetService } from './password-reset.service.js';
     SmtpMailSender,
     { provide: MAIL_SENDER, useExisting: SmtpMailSender },
   ],
+  exports: [SessionService, SessionGuard],
 })
 export class AuthModule {}

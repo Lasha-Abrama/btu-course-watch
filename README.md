@@ -1,12 +1,12 @@
 # BTU Course Watch
 
-Production-oriented monorepo for a BTU course availability monitoring platform. The API and web app support BTU email registration, verification, password login, Google sign-in, password recovery, and application sessions; course monitoring is not implemented yet.
+Production-oriented monorepo for a BTU course availability monitoring platform. The API and web app support BTU email registration, verification, password login, Google sign-in, password recovery, and application sessions. The extension can now submit a manually inspected structured observation after explicit account linking; monitoring is not implemented yet.
 
 ## Workspace
 
 - `apps/api` — NestJS 12 ESM API; application routes live under `/api/v1` and Swagger is served at `/api/docs`.
 - `apps/web` — Next.js TypeScript application using the App Router.
-- `apps/extension` — Chrome Manifest V3 TypeScript extension for manual, local Groups-page inspection.
+- `apps/extension` — Chrome Manifest V3 TypeScript extension for manual, local Groups-page inspection and scoped submission.
 - `packages/contracts` — framework-neutral TypeScript contracts shared by applications.
 - `packages/classroom-parser` — pure, fixture-tested BTU Classroom course-page HTML parser, used locally by the extension.
 - `compose.yaml` — PostgreSQL for local development.
@@ -33,7 +33,7 @@ The API defaults to `http://localhost:3001`, its health endpoint is `http://loca
 
 Before registration or recovery can deliver email, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_FROM`, and the exact frontend `CORS_ORIGIN` in `apps/api/.env`. Set `SMTP_USER` and `SMTP_PASSWORD` together if your SMTP server requires authentication. Docker Compose starts PostgreSQL only; it does not provide an SMTP server. Production requires HTTPS for the API and frontend and TLS for SMTP. Set `NEXT_PUBLIC_API_URL` in `apps/web/.env.local` to the browser-reachable API `/api/v1` URL.
 
-The first Prisma migration creates `User` and `EmailVerificationToken`; `20260928010000_auth_sessions` adds `AuthSession` and `RefreshToken`; `20260928020000_google_identity` makes `User.passwordHash` nullable and adds `GoogleIdentity`; `20260929000000_password_reset` adds `PasswordResetToken`; `20260929010000_course_observations` adds canonical `Course`, `Group`, and `GroupStateChange` state. On an existing checkout, apply pending migrations with `pnpm --filter api exec prisma migrate deploy`. Avoid `db:push` for tracked schema changes.
+The first Prisma migration creates `User` and `EmailVerificationToken`; `20260928010000_auth_sessions` adds `AuthSession` and `RefreshToken`; `20260928020000_google_identity` makes `User.passwordHash` nullable and adds `GoogleIdentity`; `20260929000000_password_reset` adds `PasswordResetToken`; `20260929010000_course_observations` adds canonical `Course`, `Group`, and `GroupStateChange` state; `20260930000000_extension_authorization` adds hashed, revocable extension linking/credential records. On an existing checkout, apply pending migrations with `pnpm --filter api exec prisma migrate deploy`. Avoid `db:push` for tracked schema changes.
 
 ## Email verification milestone
 
@@ -49,7 +49,7 @@ After email verification, `POST /api/v1/auth/login` accepts the registered BTU C
 
 For local development, cookies use `SameSite=Lax` and are not `Secure` on HTTP localhost. Production cookies are always `Secure`, and both `API_PUBLIC_URL` and `CORS_ORIGIN` must use HTTPS. Set `COOKIE_SAME_SITE=none` only for a production cross-site frontend/API deployment; keep `lax` for same-site deployment. Browser clients on the separate Next.js origin must use `credentials: 'include'`. The API permits credentialed CORS only for the exact configured `CORS_ORIGIN`. Nest's cross-origin request protection rejects unsafe requests from other browser origins, including same-site sibling origins; the configured frontend origin is explicitly trusted. Do not configure a wildcard origin. A production reverse proxy must preserve the request's `Host`, `Origin`, and `Sec-Fetch-Site` headers and serve HTTPS. Cross-site deployments also depend on browser third-party-cookie policy; a same-site deployment is preferable.
 
-This session is for BTU Course Watch only. It does not accept or store BTU Classroom credentials. The Next.js client uses `credentials: 'include'` and never reads the HttpOnly cookies. Its shared profile request attempts one refresh on a `401`, coalesces simultaneous refreshes, and retries each request once. The home page reflects `/users/me` and calls the backend logout endpoint; `RequireAuth` is available for future protected pages. There is no extension auth yet.
+This session is for BTU Course Watch only. It does not accept or store BTU Classroom credentials. The Next.js client uses `credentials: 'include'` and never reads the HttpOnly cookies. Its shared profile request attempts one refresh on a `401`, coalesces simultaneous refreshes, and retries each request once. The home page reflects `/users/me` and calls the backend logout endpoint; `RequireAuth` is available for future protected pages. Extension authorization is a separate scoped credential and never copies these cookies.
 
 ## Google sign-in
 
@@ -79,7 +79,7 @@ pnpm format
 
 ## Chrome extension
 
-Build with `pnpm --filter @btu-course-watch/extension build`, then load `apps/extension/dist` through Chrome's **Load unpacked** flow. After signing in to BTU Classroom in a normal tab, open a subject's **Groups** page and click **Inspect this page** in the popup. The extension requests only `https://classroom.btu.edu.ge/*` host access; it fetches and parses the page locally with the existing browser session, without reading or sending BTU credentials or HTML. See the [extension manual-test guide](apps/extension/README.md) for exact steps and expected error states. No monitoring or extension-to-API submission exists.
+Build with `pnpm --filter @btu-course-watch/extension build`, then load `apps/extension/dist` through Chrome's **Load unpacked** flow. The local manifest grants `storage`, Classroom host access, and the exact development API origin; production builds require explicit HTTPS `BCW_API_ORIGIN` and `BCW_WEB_ORIGIN`. From the popup, **Connect Course Watch**, match the pairing code on the trusted web approval page, approve while signed in, then **Check authorization**. After signing in to BTU Classroom separately, open a subject's **Groups** page and click **Inspect this page**. The extension parses locally and sends only the structured observation to the dedicated API route. See the [extension manual-test guide](apps/extension/README.md) for the full link → inspect → submit → revoke test. No polling, monitoring, enrollment, or Choose navigation exists.
 
 ## Structured observation ingestion (Phase 5A)
 
@@ -87,7 +87,7 @@ Build with `pnpm --filter @btu-course-watch/extension build`, then load `apps/ex
 
 The backend stores one `Course` per BTU course ID and one `Group` per `(course, BTU group ID)`, plus meaningful `GroupStateChange` events. First sightings are `DISCOVERED` with no fabricated previous status. A fresh definitive status change is `STATUS_CHANGED`; identical or stale scans do not add history. Each group ignores observations at or before its `lastObservedAt`. Missing groups are left untouched. A fresh `UNKNOWN` scan advances the observation time and clears any currently exposed Choose URL, but does not replace a previously definitive `AVAILABLE`/`FULL` status; `UNKNOWN` is a valid initial state. Availability is therefore **last known**, not guaranteed live. Transactions use PostgreSQL serializable isolation, uniqueness constraints, and bounded conflict retries for simultaneous submissions. No scan log or term model is created: the second Groups-route parameter's meaning remains unconfirmed.
 
-Phase 5A intentionally leaves the extension's inspection-only behavior unchanged. Its existing Classroom permission and browser-local HTML parsing do not provide BTU Course Watch application authentication or a safe cross-origin CSRF design for API submission. Until that is designed separately, use authenticated API tests or a trusted development client to exercise ingestion. BTU passwords, cookies, sessions, authorization data, and raw HTML must remain browser-local and must never be posted to this API. The API cannot independently attest that a structured observation came from BTU; that trust boundary needs an explicit Phase 5B decision.
+Phase 5B preserves that canonical state engine and adds a separate, explicit extension authorization bridge. The website's cookie login approves a five-minute, verifier-bound link request; the extension exchanges the verifier once for a random 90-day observation-only credential. The API stores only its hash and can revoke it immediately from `/extension-link`. Extension API requests omit web cookies and use bearer authorization only on dedicated `/api/v1/extension/*` routes; web cookie routes retain their origin/CSRF protection. The normal `/observations` endpoint remains cookie-only. The backend still cannot independently attest that client-produced structured observations came from BTU, so access is limited and requires deliberate user authorization. BTU passwords, cookies, sessions, authorization headers, and raw HTML never reach the Course Watch API; Classroom and Course Watch authentication remain separate.
 
 ## Course-page parsing foundation (Phase 3)
 

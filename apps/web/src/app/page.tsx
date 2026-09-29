@@ -71,6 +71,7 @@ export default function Home() {
             <span className="session-dot" />
             Signed in as <strong>{user.email}</strong>
             <p>Your account is ready. Course monitoring is not live yet.</p>
+            <Link href="/extension-link">Manage extension access</Link>
           </div>
         )}
         {!loading && !error && !user && (

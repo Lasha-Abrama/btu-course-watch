@@ -2,8 +2,11 @@ import "./popup.css";
 import type { CourseObservation } from "@btu-course-watch/contracts";
 import {
   INSPECT_REQUEST,
+  LINK_START,
+  LINK_STATUS,
+  type LinkResult,
   type InspectionError,
-  type InspectionResult,
+  type InspectionSubmissionResult,
 } from "./protocol.js";
 
 const status = document.querySelector<HTMLParagraphElement>("#status");
@@ -11,10 +14,54 @@ const button = document.querySelector<HTMLButtonElement>("#inspect");
 const results = document.querySelector<HTMLElement>("#results");
 const summary = document.querySelector<HTMLParagraphElement>("#summary");
 const groups = document.querySelector<HTMLUListElement>("#groups");
+const linkStatusText =
+  document.querySelector<HTMLParagraphElement>("#link-status");
+const linkButton = document.querySelector<HTMLButtonElement>("#link");
+const checkLinkButton =
+  document.querySelector<HTMLButtonElement>("#check-link");
 
-if (!status || !button || !results || !summary || !groups) {
+if (
+  !status ||
+  !button ||
+  !results ||
+  !summary ||
+  !groups ||
+  !linkStatusText ||
+  !linkButton ||
+  !checkLinkButton
+) {
   throw new Error("Popup elements are missing.");
 }
+
+async function updateLink(type: typeof LINK_START | typeof LINK_STATUS) {
+  linkButton!.disabled = true;
+  checkLinkButton!.disabled = true;
+  linkStatusText!.textContent =
+    type === LINK_START ? "Opening authorization…" : "Checking authorization…";
+  try {
+    const response = (await chrome.runtime.sendMessage({ type })) as LinkResult;
+    if (!response?.ok) throw new Error("LINK_FAILED");
+    linkButton!.hidden = response.link.state !== "NOT_LINKED";
+    checkLinkButton!.hidden = response.link.state !== "PENDING";
+    linkStatusText!.textContent =
+      response.link.state === "LINKED"
+        ? `Course Watch connected until ${new Date(response.link.expiresAt).toLocaleDateString()}.`
+        : response.link.state === "PENDING"
+          ? `Approve in the Course Watch tab. Match code ${response.link.pairingCode}, then check authorization.`
+          : "Not connected to Course Watch. Local inspection still works.";
+  } catch {
+    linkStatusText!.textContent =
+      "Could not check Course Watch connection. Try again.";
+    checkLinkButton!.hidden = false;
+  } finally {
+    linkButton!.disabled = false;
+    checkLinkButton!.disabled = false;
+  }
+}
+
+linkButton.addEventListener("click", () => void updateLink(LINK_START));
+checkLinkButton.addEventListener("click", () => void updateLink(LINK_STATUS));
+void updateLink(LINK_STATUS);
 
 const errorMessages: Record<InspectionError, string> = {
   NOT_CLASSROOM: "Open BTU Classroom in the active tab first.",
@@ -49,13 +96,21 @@ button.addEventListener("click", async () => {
   try {
     const response = (await chrome.runtime.sendMessage({
       type: INSPECT_REQUEST,
-    })) as InspectionResult | undefined;
+    })) as InspectionSubmissionResult | undefined;
     if (!response || typeof response !== "object") {
       status.textContent = errorMessages.REQUEST_FAILED;
     } else if (response.ok) {
       renderObservation(response.observation);
       status.textContent =
-        "Inspection complete. Results stayed in this browser.";
+        response.submission.state === "SUBMITTED"
+          ? "Inspection complete. Structured observation submitted to Course Watch."
+          : response.submission.state === "NOT_LINKED"
+            ? "Inspection complete locally. Connect Course Watch to submit."
+            : response.submission.state === "AUTH_REQUIRED"
+              ? "Inspection complete locally. Course Watch authorization expired or was revoked; connect again."
+              : "Inspection complete locally, but submission failed. Retry when Course Watch is reachable.";
+      if (response.submission.state === "AUTH_REQUIRED")
+        void updateLink(LINK_STATUS);
     } else {
       status.textContent =
         errorMessages[response.error] ?? errorMessages.REQUEST_FAILED;

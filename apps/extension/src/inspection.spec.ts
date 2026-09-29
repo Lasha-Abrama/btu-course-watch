@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { groupsPageFromUrl, inspectGroupsPage } from "./inspection.js";
-import { INSPECT_REQUEST, isInspectRequest } from "./protocol.js";
+import { INSPECT_REQUEST, LINK_START, isInspectRequest } from "./protocol.js";
 
 const groupsUrl =
   "https://classroom.btu.edu.ge/ge/student/me/course/groups/665/47";
@@ -190,6 +190,12 @@ describe("local inspection and message boundary", () => {
         },
       },
       tabs: { query },
+      storage: {
+        local: {
+          setAccessLevel: vi.fn().mockResolvedValue(undefined),
+          get: vi.fn().mockResolvedValue({}),
+        },
+      },
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(fetchResponse(html)));
     try {
@@ -205,6 +211,24 @@ describe("local inspection and message boundary", () => {
       expect(query).not.toHaveBeenCalled();
       expect(
         listener?.(
+          { type: LINK_START },
+          { id: "test-extension", url: "https://classroom.btu.edu.ge/" },
+          sendResponse,
+        ),
+      ).toBeUndefined();
+      expect(
+        listener?.(
+          { type: LINK_START, redirect: "https://evil.example" },
+          {
+            id: "test-extension",
+            url: "chrome-extension://test-extension/popup.html",
+          },
+          sendResponse,
+        ),
+      ).toBeUndefined();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(
+        listener?.(
           { type: INSPECT_REQUEST },
           {
             id: "test-extension",
@@ -217,6 +241,7 @@ describe("local inspection and message boundary", () => {
       expect(sendResponse.mock.calls[0]?.[0]).toMatchObject({
         ok: true,
         observation: { btuCourseId: "665" },
+        submission: { state: "NOT_LINKED" },
       });
       expect(JSON.stringify(sendResponse.mock.calls[0]?.[0])).not.toContain(
         "<html",

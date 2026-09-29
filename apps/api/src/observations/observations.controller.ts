@@ -32,6 +32,36 @@ import {
 } from './observation.validation.js';
 import { ObservationsService } from './observations.service.js';
 
+export const observationBody = {
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['btuCourseId', 'observedAt', 'courseName', 'groups'],
+    properties: {
+      btuCourseId: { type: 'string', maxLength: 255 },
+      observedAt: { type: 'string', format: 'date-time' },
+      courseName: { type: 'string', nullable: true, maxLength: 500 },
+      groups: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 100,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['btuGroupId', 'name', 'capacity', 'status', 'chooseUrl'],
+          properties: {
+            btuGroupId: { type: 'string', maxLength: 255 },
+            name: { type: 'string', nullable: true, maxLength: 500 },
+            capacity: { type: 'integer', nullable: true, minimum: 0 },
+            status: { type: 'string', enum: ['AVAILABLE', 'FULL', 'UNKNOWN'] },
+            chooseUrl: { type: 'string', nullable: true, maxLength: 2048 },
+          },
+        },
+      },
+    },
+  },
+} satisfies Parameters<typeof ApiBody>[0];
+
 @ApiTags('observations')
 @ApiCookieAuth('accessCookie')
 @ApiUnauthorizedResponse({
@@ -49,38 +79,7 @@ export class ObservationsController {
     description:
       'Accepts structured data only, never BTU HTML or credentials. Requires the application access cookie and the configured trusted origin for browser requests.',
   })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['btuCourseId', 'observedAt', 'courseName', 'groups'],
-      properties: {
-        btuCourseId: { type: 'string', maxLength: 255 },
-        observedAt: { type: 'string', format: 'date-time' },
-        courseName: { type: 'string', nullable: true, maxLength: 500 },
-        groups: {
-          type: 'array',
-          minItems: 1,
-          maxItems: 100,
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['btuGroupId', 'name', 'capacity', 'status', 'chooseUrl'],
-            properties: {
-              btuGroupId: { type: 'string', maxLength: 255 },
-              name: { type: 'string', nullable: true, maxLength: 500 },
-              capacity: { type: 'integer', nullable: true, minimum: 0 },
-              status: {
-                type: 'string',
-                enum: ['AVAILABLE', 'FULL', 'UNKNOWN'],
-              },
-              chooseUrl: { type: 'string', nullable: true, maxLength: 2048 },
-            },
-          },
-        },
-      },
-    },
-  })
+  @ApiBody(observationBody)
   @ApiCreatedResponse({
     description: 'Sanitized counts of accepted group updates and events.',
     schema: {

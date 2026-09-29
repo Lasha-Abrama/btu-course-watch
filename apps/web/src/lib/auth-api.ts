@@ -117,3 +117,61 @@ export async function getCurrentUser(): Promise<CurrentUserResponse | null> {
   await ensureOk(response);
   return response.json() as Promise<CurrentUserResponse>;
 }
+
+export interface ExtensionAuthorization {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface ExtensionLinkRequest {
+  requestId: string;
+  pairingCode: string;
+  expiresAt: string;
+  approved: boolean;
+}
+
+async function extensionRequest(path: string, method: "GET" | "POST") {
+  let response = await request(
+    path,
+    method,
+    method === "POST" ? {} : undefined,
+  );
+  if (response.status === 401 && (await refreshOnce())) {
+    response = await request(path, method, method === "POST" ? {} : undefined);
+  }
+  await ensureOk(response);
+  return response;
+}
+
+export async function getExtensionLinkRequest(
+  id: string,
+): Promise<ExtensionLinkRequest> {
+  return (
+    await extensionRequest(
+      `/extension/link-requests/${encodeURIComponent(id)}`,
+      "GET",
+    )
+  ).json();
+}
+
+export async function approveExtensionLinkRequest(id: string): Promise<void> {
+  await extensionRequest(
+    `/extension/link-requests/${encodeURIComponent(id)}/approve`,
+    "POST",
+  );
+}
+
+export async function listExtensionAuthorizations(): Promise<
+  ExtensionAuthorization[]
+> {
+  return (await extensionRequest("/extension/authorizations", "GET")).json();
+}
+
+export async function revokeExtensionAuthorization(id: string): Promise<void> {
+  await extensionRequest(
+    `/extension/authorizations/${encodeURIComponent(id)}/revoke`,
+    "POST",
+  );
+}

@@ -33,6 +33,20 @@ h1 {
   margin: 0.75rem 0 1rem;
   line-height: 1.45;
 }
+.account {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  border: 1px solid #d5dce8;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+.account p {
+  margin: 0 0 0.6rem;
+  line-height: 1.4;
+}
+.account button {
+  margin-right: 0.4rem;
+}
 
 button {
   border: 0;

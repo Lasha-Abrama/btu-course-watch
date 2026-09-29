@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCurrentUser, login, logout, register } from "./auth-api";
+import {
+  approveExtensionLinkRequest,
+  getCurrentUser,
+  getExtensionLinkRequest,
+  login,
+  logout,
+  register,
+  revokeExtensionAuthorization,
+} from "./auth-api";
 
 const profile = {
   id: "user-id",
@@ -94,5 +102,31 @@ describe("cookie-based frontend auth client", () => {
     expect(await getCurrentUser()).toBeNull();
     expect(meCalls).toBe(1);
     expect(refreshCalls).toBe(1);
+  });
+
+  it("uses only the trusted web cookie session for explicit extension approval and revocation", async () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const fetcher = vi.fn(async (url: string, _options: RequestInit) =>
+      url.endsWith(`/${id}`)
+        ? Response.json({
+            requestId: id,
+            pairingCode: "111111",
+            expiresAt: "2026-10-01T00:00:00.000Z",
+            approved: false,
+          })
+        : new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    expect((await getExtensionLinkRequest(id)).pairingCode).toBe("111111");
+    await approveExtensionLinkRequest(id);
+    await revokeExtensionAuthorization(id);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    for (const [, options] of fetcher.mock.calls) {
+      expect(options.credentials).toBe("include");
+      expect(options.headers ?? {}).not.toHaveProperty("Authorization");
+    }
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      `http://localhost:3001/api/v1/extension/link-requests/${id}/approve`,
+    );
   });
 });

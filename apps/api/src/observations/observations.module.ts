@@ -7,5 +7,6 @@ import { ObservationsService } from './observations.service.js';
 @Module({
   controllers: [ObservationsController],
   providers: [ObservationsService, SessionGuard, SessionService],
+  exports: [ObservationsService],
 })
 export class ObservationsModule {}
