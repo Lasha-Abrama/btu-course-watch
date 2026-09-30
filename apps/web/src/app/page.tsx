@@ -54,8 +54,8 @@ export default function Home() {
           Your course plans deserve a clearer view<span>.</span>
         </h1>
         <p>
-          BTU Course Watch account access is ready. Course availability
-          monitoring is coming in a future phase.
+          Connect the Chrome extension to inspect watched courses while your
+          browser and BTU Classroom session are available.
         </p>
         {loading && <p role="status">Checking your session…</p>}
         {error && (
@@ -70,7 +70,7 @@ export default function Home() {
           <div className="session-card">
             <span className="session-dot" />
             Signed in as <strong>{user.email}</strong>
-            <p>Your account is ready. Course monitoring is not live yet.</p>
+            <p>Browser-assisted checks are best effort, not live or 24/7.</p>
             <Link href="/extension-link">Manage extension access</Link>
             <Link href="/watches">View watched groups</Link>
           </div>

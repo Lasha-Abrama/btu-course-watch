@@ -87,6 +87,12 @@ describe("local inspection and message boundary", () => {
         fetchPage,
       ),
     ).toEqual({ ok: false, error: "UNSUPPORTED_PAGE" });
+    expect(
+      await inspectGroupsPage(
+        "https://classroom.btu.edu.ge/ge/student/me/course/groups/665",
+        fetchPage,
+      ),
+    ).toEqual({ ok: false, error: "UNSUPPORTED_PAGE" });
     expect(fetchPage).not.toHaveBeenCalled();
   });
 
@@ -178,7 +184,10 @@ describe("local inspection and message boundary", () => {
   it("lets only the popup trigger the worker and messages back no raw HTML", async () => {
     let listener:
       Parameters<typeof chrome.runtime.onMessage.addListener>[0] | undefined;
+    let alarmListener:
+      Parameters<typeof chrome.alarms.onAlarm.addListener>[0] | undefined;
     const query = vi.fn().mockResolvedValue([{ url: groupsUrl }]);
+    const setStorage = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("chrome", {
       runtime: {
         id: "test-extension",
@@ -188,18 +197,41 @@ describe("local inspection and message boundary", () => {
             listener = callback;
           },
         },
+        onInstalled: { addListener: vi.fn() },
+        onStartup: { addListener: vi.fn() },
+      },
+      alarms: {
+        get: vi.fn().mockResolvedValue({ periodInMinutes: 30 }),
+        create: vi.fn().mockResolvedValue(undefined),
+        onAlarm: {
+          addListener: (callback: NonNullable<typeof alarmListener>) => {
+            alarmListener = callback;
+          },
+        },
       },
       tabs: { query },
       storage: {
         local: {
           setAccessLevel: vi.fn().mockResolvedValue(undefined),
           get: vi.fn().mockResolvedValue({}),
+          set: setStorage,
         },
       },
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(fetchResponse(html)));
     try {
       await import("./background.js");
+      alarmListener?.({ name: "unrelated-alarm" } as chrome.alarms.Alarm);
+      expect(setStorage).not.toHaveBeenCalled();
+      alarmListener?.({
+        name: "course-watch-observations",
+      } as chrome.alarms.Alarm);
+      await vi.waitFor(() =>
+        expect(setStorage).toHaveBeenCalledWith({
+          monitoringHealth: expect.objectContaining({ state: "LINK_REQUIRED" }),
+        }),
+      );
+      expect(fetch).not.toHaveBeenCalled();
       const sendResponse = vi.fn();
       expect(
         listener?.(

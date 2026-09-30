@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => {
               name: "BTU Course Watch",
               description: "The browser companion for BTU Course Watch.",
               version: "0.1.0",
-              permissions: ["storage"],
+              permissions: ["storage", "alarms"],
               host_permissions: [
                 "https://classroom.btu.edu.ge/*",
                 `${apiOrigin}/*`,

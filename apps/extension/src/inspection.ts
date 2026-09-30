@@ -28,26 +28,27 @@ export function groupsPageFromUrl(
       return "SESSION_REQUIRED";
     if (url.href !== raw || url.search || url.hash) return "UNSUPPORTED_PAGE";
     const match = GROUPS_PATH.exec(url.pathname);
-    if (!match) return "UNSUPPORTED_PAGE";
+    if (!match || match[1]!.length > 255 || match[2]!.length > 255)
+      return "UNSUPPORTED_PAGE";
     return { url: url.href, btuCourseId: match[1]! };
   } catch {
     return "NOT_CLASSROOM";
   }
 }
 
-type FetchPage = (url: string, init: RequestInit) => Promise<Response>;
+export type FetchPage = (url: string, init: RequestInit) => Promise<Response>;
 
-/** HTML stays in this worker; only an observation or fixed error crosses the message boundary. */
-export async function inspectGroupsPage(
-  tabUrl: string | undefined,
+/** Only a sanitized result leaves this worker-local authenticated fetch boundary. */
+export async function fetchClassroomHtml(
+  url: string,
   fetchPage: FetchPage = fetch,
-): Promise<InspectionResult> {
-  const page = groupsPageFromUrl(tabUrl);
-  if (typeof page === "string") return { ok: false, error: page };
-
+): Promise<
+  | { ok: true; html: string }
+  | { ok: false; error: "SESSION_REQUIRED" | "REQUEST_FAILED"; status?: number }
+> {
   let response: Response;
   try {
-    response = await fetchPage(page.url, {
+    response = await fetchPage(url, {
       credentials: "include",
       cache: "no-store",
       redirect: "manual",
@@ -61,24 +62,37 @@ export async function inspectGroupsPage(
     response.type === "opaqueredirect" ||
     response.redirected ||
     (response.status >= 300 && response.status < 400) ||
-    (response.url && response.url !== page.url) ||
+    (response.url && response.url !== url) ||
     response.status === 401 ||
     response.status === 403
   )
     return { ok: false, error: "SESSION_REQUIRED" };
-  if (!response.ok) return { ok: false, error: "REQUEST_FAILED" };
+  if (!response.ok)
+    return { ok: false, error: "REQUEST_FAILED", status: response.status };
 
-  let html: string;
   try {
-    html = await response.text();
+    const html = await response.text();
+    if (PASSWORD_INPUT.test(html))
+      return { ok: false, error: "SESSION_REQUIRED" };
+    return { ok: true, html };
   } catch {
     return { ok: false, error: "REQUEST_FAILED" };
   }
-  if (PASSWORD_INPUT.test(html))
-    return { ok: false, error: "SESSION_REQUIRED" };
+}
+
+/** HTML stays in this worker; only an observation or fixed error crosses the message boundary. */
+export async function inspectGroupsPage(
+  tabUrl: string | undefined,
+  fetchPage: FetchPage = fetch,
+): Promise<InspectionResult> {
+  const page = groupsPageFromUrl(tabUrl);
+  if (typeof page === "string") return { ok: false, error: page };
+
+  const fetched = await fetchClassroomHtml(page.url, fetchPage);
+  if (!fetched.ok) return { ok: false, error: fetched.error };
 
   try {
-    const observation = parseCoursePage(html, {
+    const observation = parseCoursePage(fetched.html, {
       btuCourseId: page.btuCourseId,
       observedAt: new Date().toISOString(),
     });

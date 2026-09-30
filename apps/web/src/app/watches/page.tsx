@@ -50,7 +50,7 @@ export default function WatchesPage() {
     <AuthShell
       eyebrow="YOUR COURSE PLANS"
       title="Watched groups"
-      description="Groups you chose to track. Availability below is the last observation we received, not a live status or enrollment. Automatic monitoring is not active yet."
+      description="Groups you chose to track. Availability is last observed, not live or enrollment. The linked extension can check while Chrome and your BTU Classroom session are available."
       footer={<Link href="/">Back to your account</Link>}
     >
       <RequireAuth>

@@ -47,6 +47,25 @@ h1 {
 .account button {
   margin-right: 0.4rem;
 }
+.monitoring {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  border: 1px solid #d5dce8;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+.monitoring h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+.monitoring p {
+  margin: 0.4rem 0 0;
+  line-height: 1.4;
+}
+#monitoring-times {
+  color: #52627a;
+  font-size: 0.8rem;
+}
 
 button {
   border: 0;

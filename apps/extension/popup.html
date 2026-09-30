@@ -21,13 +21,24 @@
           Check authorization
         </button>
       </section>
+      <section class="monitoring" aria-label="Browser-assisted monitoring">
+        <h2>Browser-assisted checks</h2>
+        <p id="monitoring-status" role="status" aria-live="polite">
+          Loading check status…
+        </p>
+        <p id="monitoring-times"></p>
+        <p class="watch-note">
+          Checks need Chrome and your BTU Classroom session. Availability is not
+          live.
+        </p>
+      </section>
       <button id="inspect" type="button">Inspect this page</button>
       <p id="status" role="status" aria-live="polite">No page inspected yet.</p>
       <section id="results" aria-label="Course observation" hidden>
         <p id="summary"></p>
         <p class="watch-note">
           Availability is last observed, not live. Watching records your
-          interest; it does not enroll you or start automatic monitoring.
+          interest; it does not mean a place is available or enroll you.
         </p>
         <ul id="groups"></ul>
       </section>

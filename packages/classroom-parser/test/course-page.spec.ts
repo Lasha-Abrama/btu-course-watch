@@ -84,6 +84,14 @@ describe("BTU Classroom course page parser", () => {
     ]);
   });
 
+  it("ignores unrelated rating badges beside groups", () => {
+    const groups = scan("rating-badge").groups;
+    expect(groups).toEqual(scan("mixed-groups").groups);
+    expect(JSON.stringify(groups)).not.toMatch(
+      /rating|stars|lecturer|instructor/i,
+    );
+  });
+
   it("recognizes the same group ID becoming available only from the new exposed URL", () => {
     const before = scan("all-full").groups.find(
       (group) => group.btuGroupId === "13435",

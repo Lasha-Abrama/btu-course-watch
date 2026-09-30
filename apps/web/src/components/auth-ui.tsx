@@ -29,8 +29,8 @@ export function AuthShell({
             Your next course starts with a little more certainty<span>.</span>
           </h2>
           <p>
-            One place for your BTU Course Watch account. Course availability
-            monitoring is on its way.
+            One place for your BTU Course Watch account. The browser extension
+            can check watched courses while Chrome is running.
           </p>
           <div className="orbit" aria-hidden="true">
             <span>BTU</span>

@@ -4,12 +4,14 @@ import type {
   WatchResponse,
 } from "@btu-course-watch/contracts";
 import type { LinkState, SubmissionResult, WatchResult } from "./account.js";
+import type { MonitoringHealth } from "./monitoring.js";
 
 export const INSPECT_REQUEST = "INSPECT_GROUPS_PAGE";
 export const LINK_START = "LINK_START";
 export const LINK_STATUS = "LINK_STATUS";
 export const WATCH_GROUP = "WATCH_GROUP";
 export const UNWATCH_GROUP = "UNWATCH_GROUP";
+export const MONITOR_STATUS = "MONITOR_STATUS";
 
 export type InspectionError =
   | "NOT_CLASSROOM"
@@ -37,8 +39,18 @@ export type LinkResult =
 export type WatchMessageResult =
   { ok: true; watches: WatchResult } | { ok: false; error: "REQUEST_FAILED" };
 
+export type MonitorStatusResult =
+  | { ok: true; health: MonitoringHealth }
+  | { ok: false; error: "REQUEST_FAILED" };
+
 export type PopupRequest =
-  | { type: typeof INSPECT_REQUEST | typeof LINK_START | typeof LINK_STATUS }
+  | {
+      type:
+        | typeof INSPECT_REQUEST
+        | typeof LINK_START
+        | typeof LINK_STATUS
+        | typeof MONITOR_STATUS;
+    }
   | { type: typeof WATCH_GROUP; group: WatchCreateRequest }
   | { type: typeof UNWATCH_GROUP; watchId: string };
 
@@ -49,7 +61,9 @@ export function isPopupRequest(value: unknown): value is PopupRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const message = value as Record<string, unknown>;
   if (
-    [INSPECT_REQUEST, LINK_START, LINK_STATUS].includes(message.type as string)
+    [INSPECT_REQUEST, LINK_START, LINK_STATUS, MONITOR_STATUS].includes(
+      message.type as string,
+    )
   )
     return Object.keys(message).length === 1;
   if (message.type === WATCH_GROUP) {

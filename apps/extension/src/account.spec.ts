@@ -112,6 +112,11 @@ describe("extension Course Watch authorization", () => {
 
   it("drops revoked credentials and preserves local inspection on submission failures", async () => {
     const local = storage();
+    local.values.monitoringHealth = {
+      state: "CHECKED",
+      failures: [{ btuCourseId: "665" }],
+    };
+    local.values.monitoringCursor = 2;
     local.values.courseWatchLink = {
       credential: {
         value: `bcwx_${"B".repeat(43)}`,
@@ -128,6 +133,8 @@ describe("extension Course Watch authorization", () => {
       await submitObservation(observation, local, revoked as typeof fetch),
     ).toEqual({ state: "AUTH_REQUIRED" });
     expect(local.values.courseWatchLink).toBeUndefined();
+    expect(local.values.monitoringHealth).toBeUndefined();
+    expect(local.values.monitoringCursor).toBeUndefined();
     expect(
       await submitObservation(observation, local, revoked as typeof fetch),
     ).toEqual({ state: "NOT_LINKED" });

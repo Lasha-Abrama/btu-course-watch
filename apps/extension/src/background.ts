@@ -9,9 +9,16 @@ import {
 } from "./account.js";
 import { completeInspection } from "./inspection-submission.js";
 import {
+  ensureMonitoringAlarm,
+  MONITOR_ALARM,
+  readMonitoringHealth,
+  runMonitoringCycle,
+} from "./monitoring.js";
+import {
   INSPECT_REQUEST,
   LINK_START,
   LINK_STATUS,
+  MONITOR_STATUS,
   UNWATCH_GROUP,
   WATCH_GROUP,
   isPopupRequest,
@@ -19,6 +26,27 @@ import {
 
 const storageReady = chrome.storage.local.setAccessLevel({
   accessLevel: "TRUSTED_CONTEXTS",
+});
+
+// Reconcile after worker restarts as well as browser/extension lifecycle events.
+function reconcileAlarm(): void {
+  void storageReady.then(() => ensureMonitoringAlarm()).catch(() => undefined);
+}
+reconcileAlarm();
+chrome.runtime.onInstalled.addListener(reconcileAlarm);
+chrome.runtime.onStartup.addListener(reconcileAlarm);
+
+// Best-effort overlap guard; PostgreSQL observation ordering is the authority.
+let cycleRunning = false;
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== MONITOR_ALARM || cycleRunning) return;
+  cycleRunning = true;
+  void storageReady
+    .then(() => runMonitoringCycle())
+    .catch(() => undefined)
+    .finally(() => {
+      cycleRunning = false;
+    });
 });
 
 chrome.runtime.onMessage.addListener(
@@ -52,6 +80,11 @@ chrome.runtime.onMessage.addListener(
         .then(() => linkStatus())
         .then((link) => sendResponse({ ok: true, link }))
         .catch(() => sendResponse({ ok: false, error: "LINK_FAILED" }));
+    } else if (message.type === MONITOR_STATUS) {
+      void storageReady
+        .then(() => readMonitoringHealth())
+        .then((health) => sendResponse({ ok: true, health }))
+        .catch(() => sendResponse({ ok: false, error: "REQUEST_FAILED" }));
     } else if (message.type === INSPECT_REQUEST) {
       void chrome.tabs
         .query({ active: true, lastFocusedWindow: true })

@@ -6,7 +6,7 @@ import { AuthSessionProvider } from "../components/auth-session";
 export const metadata: Metadata = {
   title: "BTU Course Watch",
   description:
-    "Your BTU Course Watch account. Course availability monitoring is on its way.",
+    "Manage watched BTU groups with browser-assisted, last-known availability checks.",
 };
 
 export default function RootLayout({

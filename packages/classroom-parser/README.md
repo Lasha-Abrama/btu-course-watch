@@ -2,6 +2,8 @@
 
 `parseCoursePage(html, { btuCourseId, observedAt, courseName? })` is a synchronous, deterministic transformation. The caller supplies already-obtained HTML and a canonical UTC ISO timestamp; the package uses no browser globals, cookies, credentials, network access, backend state, or clock. It does not click, navigate to, or construct an enrollment URL. Its output is the serializable `CourseObservation` contract from `@btu-course-watch/contracts`.
 
+`discoverGroupsUrl(subjectHtml, subjectUrl, btuCourseId)` reads ordinary anchor hrefs from already-fetched subject-page HTML. It accepts only one distinct exact HTTPS Classroom Groups URL for the requested course (identical duplicate anchors are fine), resolving safe relative hrefs without executing scripts. It returns `null` for missing, mismatched, unsafe, or ambiguous links. The second Groups-route segment is opaque and never constructed or interpreted. Two authenticated subject-page responses were manually confirmed to expose Groups anchors for courses `665` and `672`; this is not a guarantee for every course or academic period.
+
 ## Confirmed evidence and conservative rules
 
 - A visible `.group_title[data-id]` supplies `btuGroupId`, an external BTU key for this project. No undocumented internal meaning is assumed.
@@ -13,6 +15,8 @@
 - The parser ignores structurally hidden titles and actions (`hidden`, `aria-hidden="true"`, or inline `display: none`). It cannot evaluate external stylesheets or computed visibility.
 
 The fixture detail rows `tr-<btuGroupId>` and icons `ico-<btuGroupId>` reflect the manually noted correspondence. They are not parsed for schedule or lecturer fields: no sufficiently specific real detail-row structure was supplied. `courseName` is caller-provided context, never guessed from page text.
+
+An unrelated browser extension was observed injecting rating/star badges beside groups in rendered pages. Browser-assisted checks parse **network response HTML**, not another extension's rendered DOM. A sanitized badge fixture also verifies that adjacent decoration does not affect group identity, capacity, status, or Choose extraction; no rating or instructor field belongs to `CourseObservation`.
 
 ## Unsupported until more sanitized evidence is captured
 

@@ -7,14 +7,17 @@ import {
   INSPECT_REQUEST,
   LINK_START,
   LINK_STATUS,
+  MONITOR_STATUS,
   UNWATCH_GROUP,
   WATCH_GROUP,
   type LinkResult,
+  type MonitorStatusResult,
   type InspectionError,
   type InspectionSubmissionResult,
   type WatchMessageResult,
   watchForGroup,
 } from "./protocol.js";
+import { monitoringCopy } from "./monitoring-copy.js";
 
 const status = document.querySelector<HTMLParagraphElement>("#status");
 const button = document.querySelector<HTMLButtonElement>("#inspect");
@@ -26,6 +29,10 @@ const linkStatusText =
 const linkButton = document.querySelector<HTMLButtonElement>("#link");
 const checkLinkButton =
   document.querySelector<HTMLButtonElement>("#check-link");
+const monitoringStatus =
+  document.querySelector<HTMLParagraphElement>("#monitoring-status");
+const monitoringTimes =
+  document.querySelector<HTMLParagraphElement>("#monitoring-times");
 let currentWatches: WatchResponse[] = [];
 let watchReady = false;
 
@@ -37,7 +44,9 @@ if (
   !groups ||
   !linkStatusText ||
   !linkButton ||
-  !checkLinkButton
+  !checkLinkButton ||
+  !monitoringStatus ||
+  !monitoringTimes
 ) {
   throw new Error("Popup elements are missing.");
 }
@@ -72,10 +81,33 @@ linkButton.addEventListener("click", () => void updateLink(LINK_START));
 checkLinkButton.addEventListener("click", () => void updateLink(LINK_STATUS));
 void updateLink(LINK_STATUS);
 
+async function updateMonitoring(): Promise<void> {
+  try {
+    const response = (await chrome.runtime.sendMessage({
+      type: MONITOR_STATUS,
+    })) as MonitorStatusResult | undefined;
+    if (!response?.ok) throw new Error("MONITOR_STATUS_FAILED");
+    monitoringStatus!.textContent = monitoringCopy(response.health);
+    const lastAttempt = response.health.lastAttemptAt
+      ? new Date(response.health.lastAttemptAt).toLocaleString()
+      : "none yet";
+    const lastSuccess = response.health.lastSuccessfulObservationAt
+      ? new Date(response.health.lastSuccessfulObservationAt).toLocaleString()
+      : "none yet";
+    monitoringTimes!.textContent = `Last automatic attempt: ${lastAttempt}. Last successful automatic observation: ${lastSuccess}.`;
+    if (response.health.nextBtuRetryAt)
+      monitoringTimes!.textContent += ` BTU checks paused until ${new Date(response.health.nextBtuRetryAt).toLocaleString()}.`;
+  } catch {
+    monitoringStatus!.textContent =
+      "Check status could not be loaded. Reopen the extension to retry.";
+  }
+}
+void updateMonitoring();
+
 const errorMessages: Record<InspectionError, string> = {
   NOT_CLASSROOM: "Open BTU Classroom in the active tab first.",
   UNSUPPORTED_PAGE:
-    "Open a subject’s Groups tab, not My Courses or another section.",
+    "This Classroom page URL is unsupported. Reopen the subject normally, then use its Groups tab.",
   SESSION_REQUIRED:
     "Your Classroom session appears to have expired. Sign in there and retry.",
   REQUEST_FAILED:

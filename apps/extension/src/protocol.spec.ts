@@ -31,6 +31,10 @@ describe("watch popup boundary", () => {
     expect(isPopupRequest({ type: "UNWATCH_GROUP", watchId: "../evil" })).toBe(
       false,
     );
+    expect(isPopupRequest({ type: "MONITOR_STATUS" })).toBe(true);
+    expect(
+      isPopupRequest({ type: "MONITOR_STATUS", url: "https://evil.example" }),
+    ).toBe(false);
   });
 
   it("matches server-owned watch state by course and group, not availability or group ID alone", () => {

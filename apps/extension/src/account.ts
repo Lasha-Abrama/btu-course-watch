@@ -3,6 +3,7 @@ import type {
   WatchCreateRequest,
   WatchResponse,
 } from "@btu-course-watch/contracts";
+import { clearMonitoringState } from "./monitoring-storage.js";
 
 const API = `${__BCW_API_ORIGIN__}/api/v1/extension`;
 const WEB = __BCW_WEB_ORIGIN__;
@@ -45,6 +46,11 @@ async function saved(storage: Storage): Promise<SavedLink> {
   return value && typeof value === "object" ? (value as SavedLink) : {};
 }
 
+async function clearLink(storage: Storage): Promise<void> {
+  await storage.remove(LINK_KEY);
+  await clearMonitoringState(storage);
+}
+
 async function installationId(storage: Storage): Promise<string> {
   const data = await storage.get(INSTALLATION_KEY);
   if (typeof data[INSTALLATION_KEY] === "string") return data[INSTALLATION_KEY];
@@ -74,6 +80,7 @@ export async function startLink(
   storage: Storage = chrome.storage.local,
   fetcher: typeof fetch = fetch,
 ): Promise<{ pairingCode: string; expiresAt: string; url: string }> {
+  await clearMonitoringState(storage);
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   const verifier = btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, "-")
@@ -121,7 +128,7 @@ export async function linkStatus(
   const link = await saved(storage);
   if (link.credential) {
     if (Date.parse(link.credential.expiresAt) <= Date.now()) {
-      await storage.remove(LINK_KEY);
+      await clearLink(storage);
       return { state: "NOT_LINKED" };
     }
     try {
@@ -135,7 +142,7 @@ export async function linkStatus(
       if (response.ok)
         return { state: "LINKED", expiresAt: link.credential.expiresAt };
       if (response.status === 401 || response.status === 403) {
-        await storage.remove(LINK_KEY);
+        await clearLink(storage);
         return { state: "NOT_LINKED" };
       }
     } catch {
@@ -145,7 +152,7 @@ export async function linkStatus(
   }
   if (!link.pending) return { state: "NOT_LINKED" };
   if (Date.parse(link.pending.expiresAt) <= Date.now()) {
-    await storage.remove(LINK_KEY);
+    await clearLink(storage);
     return { state: "NOT_LINKED" };
   }
   const response = await post(
@@ -155,7 +162,7 @@ export async function linkStatus(
     fetcher,
   );
   if (response.status === 401 || response.status === 403) {
-    await storage.remove(LINK_KEY);
+    await clearLink(storage);
     return { state: "NOT_LINKED" };
   }
   if (!response.ok) throw new Error("LINK_FAILED");
@@ -188,7 +195,7 @@ export async function submitObservation(
   const credential = (await saved(storage)).credential;
   if (!credential) return { state: "NOT_LINKED" };
   if (Date.parse(credential.expiresAt) <= Date.now()) {
-    await storage.remove(LINK_KEY);
+    await clearLink(storage);
     return { state: "AUTH_REQUIRED" };
   }
   try {
@@ -200,7 +207,7 @@ export async function submitObservation(
     );
     if (response.ok) return { state: "SUBMITTED" };
     if (response.status === 401 || response.status === 403) {
-      await storage.remove(LINK_KEY);
+      await clearLink(storage);
       return { state: "AUTH_REQUIRED" };
     }
   } catch {
@@ -219,7 +226,7 @@ async function watchRequest(
   const credential = (await saved(storage)).credential;
   if (!credential) return { state: "NOT_LINKED" };
   if (Date.parse(credential.expiresAt) <= Date.now()) {
-    await storage.remove(LINK_KEY);
+    await clearLink(storage);
     return { state: "AUTH_REQUIRED" };
   }
   try {
@@ -233,7 +240,7 @@ async function watchRequest(
       signal: AbortSignal.timeout(15_000),
     });
     if (response.status === 401 || response.status === 403) {
-      await storage.remove(LINK_KEY);
+      await clearLink(storage);
       return { state: "AUTH_REQUIRED" };
     }
     if (!response.ok) return { state: "REQUEST_FAILED" };

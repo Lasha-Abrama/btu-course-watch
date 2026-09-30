@@ -1,4 +1,5 @@
 import { DomUtils, parseDocument } from "htmlparser2";
+export { discoverGroupsUrl } from "./subject-page.js";
 import {
   assertCourseObservation,
   isBtuChooseUrl,
