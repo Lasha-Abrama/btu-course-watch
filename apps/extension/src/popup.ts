@@ -1,12 +1,19 @@
 import "./popup.css";
-import type { CourseObservation } from "@btu-course-watch/contracts";
+import type {
+  CourseObservation,
+  WatchResponse,
+} from "@btu-course-watch/contracts";
 import {
   INSPECT_REQUEST,
   LINK_START,
   LINK_STATUS,
+  UNWATCH_GROUP,
+  WATCH_GROUP,
   type LinkResult,
   type InspectionError,
   type InspectionSubmissionResult,
+  type WatchMessageResult,
+  watchForGroup,
 } from "./protocol.js";
 
 const status = document.querySelector<HTMLParagraphElement>("#status");
@@ -19,6 +26,8 @@ const linkStatusText =
 const linkButton = document.querySelector<HTMLButtonElement>("#link");
 const checkLinkButton =
   document.querySelector<HTMLButtonElement>("#check-link");
+let currentWatches: WatchResponse[] = [];
+let watchReady = false;
 
 if (
   !status ||
@@ -82,8 +91,60 @@ function renderObservation(observation: CourseObservation): void {
     const title = document.createElement("strong");
     title.textContent = `${group.name ?? "Unnamed group"} · ID ${group.btuGroupId}`;
     const details = document.createElement("span");
-    details.textContent = `Capacity: ${group.capacity ?? "unknown"} · ${group.status} · Choose action: ${group.chooseUrl ? "present" : "none"}`;
+    details.textContent = `Capacity: ${group.capacity ?? "unknown"} · Availability: ${group.status} · Choose action: ${group.chooseUrl ? "present" : "none"}`;
     item.append(title, details);
+    const watch = watchForGroup(
+      currentWatches,
+      observation.btuCourseId,
+      group.btuGroupId,
+    );
+    const watchButton = document.createElement("button");
+    watchButton.type = "button";
+    watchButton.textContent = watch ? "Watching · remove" : "Watch group";
+    watchButton.disabled = !watchReady;
+    watchButton.setAttribute(
+      "aria-label",
+      `${watch ? "Stop watching" : "Watch"} ${group.name ?? group.btuGroupId}`,
+    );
+    watchButton.addEventListener("click", async () => {
+      watchButton.disabled = true;
+      status!.textContent = "Updating your Course Watch watch…";
+      try {
+        const response = (await chrome.runtime.sendMessage(
+          watch
+            ? { type: UNWATCH_GROUP, watchId: watch.id }
+            : {
+                type: WATCH_GROUP,
+                group: {
+                  btuCourseId: observation.btuCourseId,
+                  btuGroupId: group.btuGroupId,
+                },
+              },
+        )) as WatchMessageResult | undefined;
+        const watchResult = response?.ok ? response.watches : null;
+        if (!watchResult || watchResult.state === "REQUEST_FAILED") {
+          status!.textContent =
+            "Local inspection is still available, but your watch change failed. Try again.";
+        } else if (
+          watchResult.state === "AUTH_REQUIRED" ||
+          watchResult.state === "NOT_LINKED"
+        ) {
+          watchReady = false;
+          status!.textContent =
+            "Course Watch authorization expired or was revoked. Connect again to manage watches.";
+          void updateLink(LINK_STATUS);
+        } else if (watchResult.state === "READY") {
+          currentWatches = watchResult.watches;
+          status!.textContent =
+            "Watch state updated on Course Watch. This does not enroll you or imply current availability.";
+        }
+      } catch {
+        status!.textContent =
+          "Local inspection is still available, but your watch change failed. Try again.";
+      }
+      renderObservation(observation);
+    });
+    item.append(watchButton);
     groups!.append(item);
   }
   results!.hidden = false;
@@ -100,6 +161,9 @@ button.addEventListener("click", async () => {
     if (!response || typeof response !== "object") {
       status.textContent = errorMessages.REQUEST_FAILED;
     } else if (response.ok) {
+      watchReady = response.watches.state === "READY";
+      currentWatches =
+        response.watches.state === "READY" ? response.watches.watches : [];
       renderObservation(response.observation);
       status.textContent =
         response.submission.state === "SUBMITTED"
@@ -111,6 +175,12 @@ button.addEventListener("click", async () => {
               : "Inspection complete locally, but submission failed. Retry when Course Watch is reachable.";
       if (response.submission.state === "AUTH_REQUIRED")
         void updateLink(LINK_STATUS);
+      else if (
+        response.submission.state === "SUBMITTED" &&
+        response.watches.state !== "READY"
+      )
+        status.textContent +=
+          " Watch state could not be loaded; retry inspection before managing watches.";
     } else {
       status.textContent =
         errorMessages[response.error] ?? errorMessages.REQUEST_FAILED;

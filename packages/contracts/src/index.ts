@@ -89,6 +89,24 @@ export interface CanonicalCourseResponse {
   }>;
 }
 
+/** User intent only; availability fields are joined from shared canonical Group state. */
+export interface WatchResponse {
+  id: string;
+  createdAt: string;
+  btuCourseId: string;
+  courseName: string | null;
+  btuGroupId: string;
+  groupName: string | null;
+  capacity: number | null;
+  status: GroupAvailabilityStatus;
+  lastObservedAt: string;
+}
+
+export interface WatchCreateRequest {
+  btuCourseId: string;
+  btuGroupId: string;
+}
+
 export {
   assertCourseObservation,
   isBtuChooseUrl,

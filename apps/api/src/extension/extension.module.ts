@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
 import { ObservationsModule } from '../observations/observations.module.js';
+import { WatchesModule } from '../watches/watches.module.js';
 import { ExtensionAuthService } from './extension-auth.service.js';
 import {
   ExtensionClientController,
@@ -12,7 +13,7 @@ import {
 } from './extension.guards.js';
 
 @Module({
-  imports: [AuthModule, ObservationsModule],
+  imports: [AuthModule, ObservationsModule, WatchesModule],
   controllers: [ExtensionClientController, ExtensionWebController],
   providers: [
     ExtensionAuthService,

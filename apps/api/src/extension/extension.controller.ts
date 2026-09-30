@@ -2,11 +2,13 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   HttpCode,
   Param,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -18,13 +20,18 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiHeader,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Request } from 'express';
-import type { ObservationIngestionResponse } from '@btu-course-watch/contracts';
+import type {
+  ObservationIngestionResponse,
+  WatchResponse,
+} from '@btu-course-watch/contracts';
 import { z } from 'zod';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { SessionGuard } from '../auth/session.guard.js';
@@ -32,6 +39,8 @@ import type { CurrentUser as CurrentUserType } from '../auth/session.service.js'
 import { parseObservationPayload } from '../observations/observation.validation.js';
 import { observationBody } from '../observations/observations.controller.js';
 import { ObservationsService } from '../observations/observations.service.js';
+import { watchCreateBody } from '../watches/watches.controller.js';
+import { WatchesService } from '../watches/watches.service.js';
 import { ExtensionAuthService } from './extension-auth.service.js';
 import {
   ExtensionCredentialGuard,
@@ -147,6 +156,7 @@ export class ExtensionClientController {
   constructor(
     private readonly authorizations: ExtensionAuthService,
     private readonly observations: ObservationsService,
+    private readonly watches: WatchesService,
   ) {}
 
   @Post('link-requests')
@@ -226,7 +236,7 @@ export class ExtensionClientController {
   @ApiBearerAuth('extensionCredential')
   @Header('Cache-Control', 'no-store')
   @ApiOperation({
-    summary: 'Check whether the observation-only credential remains valid',
+    summary: 'Check whether the scoped extension credential remains valid',
   })
   @ApiUnauthorizedResponse({
     description: 'Invalid, expired, or revoked credential.',
@@ -262,5 +272,62 @@ export class ExtensionClientController {
     if (!observation)
       throw new BadRequestException('Invalid structured observation');
     return this.observations.ingest(observation);
+  }
+
+  @Get('watches')
+  @UseGuards(ExtensionCredentialGuard)
+  @ApiBearerAuth('extensionCredential')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({
+    summary: 'List watches owned by the linked Course Watch user',
+  })
+  @ApiOkResponse({
+    description: 'Owned watches with last-known canonical group state.',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid, expired, or revoked credential.',
+  })
+  listWatches(@Req() request: ExtensionRequest): Promise<WatchResponse[]> {
+    return this.watches.list(request.extensionIdentity!.userId);
+  }
+
+  @Put('watches')
+  @UseGuards(ExtensionCredentialGuard)
+  @ApiBearerAuth('extensionCredential')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({
+    summary: 'Idempotently watch an already observed group for the linked user',
+  })
+  @ApiBody(watchCreateBody)
+  @ApiOkResponse({ description: 'Owned watch and canonical group metadata.' })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid, expired, or revoked credential.',
+  })
+  @ApiBadRequestResponse({ description: 'Invalid watch request.' })
+  @ApiNotFoundResponse({
+    description: 'Canonical group has not been observed.',
+  })
+  createWatch(
+    @Req() request: ExtensionRequest,
+    @Body() body: unknown,
+  ): Promise<WatchResponse> {
+    return this.watches.create(request.extensionIdentity!.userId, body);
+  }
+
+  @Delete('watches/:watchId')
+  @HttpCode(204)
+  @UseGuards(ExtensionCredentialGuard)
+  @ApiBearerAuth('extensionCredential')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Idempotently remove an owned watch' })
+  @ApiNoContentResponse({ description: 'Removed or already absent.' })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid, expired, or revoked credential.',
+  })
+  removeWatch(
+    @Req() request: ExtensionRequest,
+    @Param('watchId') id: string,
+  ): Promise<void> {
+    return this.watches.remove(request.extensionIdentity!.userId, id);
   }
 }

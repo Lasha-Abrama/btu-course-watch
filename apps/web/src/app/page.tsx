@@ -72,6 +72,7 @@ export default function Home() {
             Signed in as <strong>{user.email}</strong>
             <p>Your account is ready. Course monitoring is not live yet.</p>
             <Link href="/extension-link">Manage extension access</Link>
+            <Link href="/watches">View watched groups</Link>
           </div>
         )}
         {!loading && !error && !user && (

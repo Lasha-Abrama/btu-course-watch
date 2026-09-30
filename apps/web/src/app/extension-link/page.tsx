@@ -85,7 +85,7 @@ export default function ExtensionLinkPage() {
     <AuthShell
       eyebrow="ACCOUNT SECURITY"
       title={requestId ? "Connect your extension" : "Extension access"}
-      description="Authorize only this Course Watch browser extension to submit structured course observations. It never shares your BTU Classroom session with us."
+      description="Authorize this Course Watch extension to submit structured observations and manage your own group watches. It never shares your BTU Classroom session with us."
       footer={<Link href="/">Back to your account</Link>}
     >
       {invalid && (
@@ -129,8 +129,8 @@ export default function ExtensionLinkPage() {
             </p>
           )}
           <p>
-            Access is limited to submitting structured observations and expires
-            after 90 days. You can revoke it here later.
+            Access is limited to structured observations and your group watches,
+            and expires after 90 days. You can revoke it here later.
           </p>
           {done || requestInfo?.approved ? (
             <Notice kind="success">

@@ -6,6 +6,7 @@ import type {
   ResetPasswordRequest,
   ResendVerificationRequest,
   VerifyEmailRequest,
+  WatchResponse,
 } from "@btu-course-watch/contracts";
 import { clientEnvironment } from "./env";
 
@@ -23,7 +24,7 @@ let refreshInFlight: Promise<boolean> | null = null;
 
 async function request(
   path: string,
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   body?: unknown,
 ): Promise<Response> {
   const options: RequestInit = {
@@ -132,24 +133,32 @@ export interface ExtensionLinkRequest {
   approved: boolean;
 }
 
-async function extensionRequest(path: string, method: "GET" | "POST") {
-  let response = await request(
-    path,
-    method,
-    method === "POST" ? {} : undefined,
-  );
+async function authenticatedRequest(
+  path: string,
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  body?: unknown,
+) {
+  let response = await request(path, method, body);
   if (response.status === 401 && (await refreshOnce())) {
-    response = await request(path, method, method === "POST" ? {} : undefined);
+    response = await request(path, method, body);
   }
   await ensureOk(response);
   return response;
+}
+
+export async function listWatches(): Promise<WatchResponse[]> {
+  return (await authenticatedRequest("/watches", "GET")).json();
+}
+
+export async function removeWatch(id: string): Promise<void> {
+  await authenticatedRequest(`/watches/${encodeURIComponent(id)}`, "DELETE");
 }
 
 export async function getExtensionLinkRequest(
   id: string,
 ): Promise<ExtensionLinkRequest> {
   return (
-    await extensionRequest(
+    await authenticatedRequest(
       `/extension/link-requests/${encodeURIComponent(id)}`,
       "GET",
     )
@@ -157,21 +166,25 @@ export async function getExtensionLinkRequest(
 }
 
 export async function approveExtensionLinkRequest(id: string): Promise<void> {
-  await extensionRequest(
+  await authenticatedRequest(
     `/extension/link-requests/${encodeURIComponent(id)}/approve`,
     "POST",
+    {},
   );
 }
 
 export async function listExtensionAuthorizations(): Promise<
   ExtensionAuthorization[]
 > {
-  return (await extensionRequest("/extension/authorizations", "GET")).json();
+  return (
+    await authenticatedRequest("/extension/authorizations", "GET")
+  ).json();
 }
 
 export async function revokeExtensionAuthorization(id: string): Promise<void> {
-  await extensionRequest(
+  await authenticatedRequest(
     `/extension/authorizations/${encodeURIComponent(id)}/revoke`,
     "POST",
+    {},
   );
 }

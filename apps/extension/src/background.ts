@@ -1,9 +1,19 @@
 import { inspectGroupsPage } from "./inspection.js";
-import { linkStatus, startLink, submitObservation } from "./account.js";
+import {
+  linkStatus,
+  listWatches,
+  startLink,
+  submitObservation,
+  unwatchGroup,
+  watchGroup,
+} from "./account.js";
+import { completeInspection } from "./inspection-submission.js";
 import {
   INSPECT_REQUEST,
   LINK_START,
   LINK_STATUS,
+  UNWATCH_GROUP,
+  WATCH_GROUP,
   isPopupRequest,
 } from "./protocol.js";
 
@@ -47,21 +57,19 @@ chrome.runtime.onMessage.addListener(
         .query({ active: true, lastFocusedWindow: true })
         .then(([tab]) => inspectGroupsPage(tab?.url))
         .then(async (result) => {
-          if (!result.ok) return result;
-          try {
-            await storageReady;
-            return {
-              ...result,
-              submission: await submitObservation(result.observation),
-            };
-          } catch {
-            return {
-              ...result,
-              submission: { state: "SUBMISSION_FAILED" as const },
-            };
-          }
+          await storageReady;
+          return completeInspection(result, submitObservation, listWatches);
         })
         .then(sendResponse)
+        .catch(() => sendResponse({ ok: false, error: "REQUEST_FAILED" }));
+    } else if (message.type === WATCH_GROUP || message.type === UNWATCH_GROUP) {
+      void storageReady
+        .then(() =>
+          message.type === WATCH_GROUP
+            ? watchGroup(message.group)
+            : unwatchGroup(message.watchId),
+        )
+        .then((watches) => sendResponse({ ok: true, watches }))
         .catch(() => sendResponse({ ok: false, error: "REQUEST_FAILED" }));
     }
     return true;

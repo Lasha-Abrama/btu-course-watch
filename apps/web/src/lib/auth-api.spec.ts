@@ -7,6 +7,8 @@ import {
   logout,
   register,
   revokeExtensionAuthorization,
+  listWatches,
+  removeWatch,
 } from "./auth-api";
 
 const profile = {
@@ -128,5 +130,33 @@ describe("cookie-based frontend auth client", () => {
     expect(fetcher.mock.calls[1]?.[0]).toBe(
       `http://localhost:3001/api/v1/extension/link-requests/${id}/approve`,
     );
+  });
+
+  it("loads and removes watches with the web cookie, retrying once after refresh", async () => {
+    let listCalls = 0;
+    const fetcher = vi.fn(async (url: string, options: RequestInit) => {
+      expect(options.credentials).toBe("include");
+      expect(options.headers ?? {}).not.toHaveProperty("Authorization");
+      if (url.endsWith("/auth/refresh"))
+        return new Response(null, { status: 204 });
+      if (url.endsWith("/watches") && options.method === "GET") {
+        listCalls++;
+        return listCalls === 1
+          ? new Response(null, { status: 401 })
+          : Response.json([{ id: "watch-1", status: "FULL" }]);
+      }
+      if (url.endsWith("/watches/watch-1") && options.method === "DELETE")
+        return new Response(null, { status: 204 });
+      throw new Error("Unexpected request");
+    });
+    vi.stubGlobal("fetch", fetcher);
+    expect(await listWatches()).toEqual([{ id: "watch-1", status: "FULL" }]);
+    await removeWatch("watch-1");
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "http://localhost:3001/api/v1/watches",
+      "http://localhost:3001/api/v1/auth/refresh",
+      "http://localhost:3001/api/v1/watches",
+      "http://localhost:3001/api/v1/watches/watch-1",
+    ]);
   });
 });

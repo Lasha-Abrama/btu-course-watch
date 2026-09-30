@@ -6,6 +6,7 @@ import { HealthModule } from './health/health.module.js';
 import { ExtensionModule } from './extension/extension.module.js';
 import { ObservationsModule } from './observations/observations.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { WatchesModule } from './watches/watches.module.js';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
     HealthModule,
     AuthModule,
     ObservationsModule,
+    WatchesModule,
     ExtensionModule,
   ],
 })

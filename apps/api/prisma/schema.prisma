@@ -20,6 +20,7 @@ model User {
   googleIdentity         GoogleIdentity?
   extensionLinkRequests  ExtensionLinkRequest[]
   extensionCredentials   ExtensionObservationCredential[]
+  watches                Watch[]
 }
 
 model GoogleIdentity {
@@ -109,6 +110,7 @@ model Group {
   lastObservedAt  DateTime                @db.Timestamptz(3)
   course          Course                  @relation(fields: [courseId], references: [id], onDelete: Cascade)
   stateChanges    GroupStateChange[]
+  watches         Watch[]
 
   @@unique([courseId, btuGroupId])
 }
@@ -158,4 +160,16 @@ model ExtensionObservationCredential {
   @@index([userId, revokedAt])
   @@index([installationId])
   @@index([expiresAt])
+}
+
+model Watch {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  groupId   String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([groupId])
 }

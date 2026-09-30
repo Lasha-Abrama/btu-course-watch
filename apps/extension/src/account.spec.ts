@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CourseObservation } from "@btu-course-watch/contracts";
-import { linkStatus, startLink, submitObservation } from "./account.js";
+import {
+  linkStatus,
+  listWatches,
+  startLink,
+  submitObservation,
+  unwatchGroup,
+  watchGroup,
+} from "./account.js";
 
 const EXTENSION_ID = "a".repeat(32);
 const observation: CourseObservation = {
@@ -124,5 +131,85 @@ describe("extension Course Watch authorization", () => {
     expect(
       await submitObservation(observation, local, revoked as typeof fetch),
     ).toEqual({ state: "NOT_LINKED" });
+  });
+
+  it("loads server watch state only after authorized requests and refetches after mutation", async () => {
+    const local = storage();
+    const credential = `bcwx_${"B".repeat(43)}`;
+    local.values.courseWatchLink = {
+      credential: {
+        value: credential,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    };
+    const watch = {
+      id: "11111111-1111-4111-8111-111111111111",
+      btuCourseId: "665",
+      btuGroupId: "13575",
+      status: "FULL",
+    };
+    const fetcher = vi.fn(async (_url: string, options: RequestInit) =>
+      options.method === "GET" || !options.method
+        ? Response.json([watch])
+        : new Response(null, { status: 204 }),
+    );
+    expect(await listWatches(local, fetcher as typeof fetch)).toEqual({
+      state: "READY",
+      watches: [watch],
+    });
+    expect(
+      await watchGroup(
+        { btuCourseId: "665", btuGroupId: "13575" },
+        local,
+        fetcher as typeof fetch,
+      ),
+    ).toEqual({ state: "READY", watches: [watch] });
+    expect(
+      await unwatchGroup(watch.id, local, fetcher as typeof fetch),
+    ).toEqual({ state: "READY", watches: [watch] });
+    expect(
+      fetcher.mock.calls.map(([, options]) => options.method ?? "GET"),
+    ).toEqual(["GET", "PUT", "GET", "DELETE", "GET"]);
+    const [, putOptions] = fetcher.mock.calls[1] as [string, RequestInit];
+    expect(putOptions.credentials).toBe("omit");
+    expect(putOptions.headers).toMatchObject({
+      Authorization: `Bearer ${credential}`,
+    });
+    expect(JSON.parse(putOptions.body as string)).toEqual({
+      btuCourseId: "665",
+      btuGroupId: "13575",
+    });
+    for (const [url, options] of fetcher.mock.calls) {
+      expect(url).not.toContain(credential);
+      expect(options.credentials).toBe("omit");
+    }
+  });
+
+  it("does not invent local watch state; revocation clears authorization and failures preserve it", async () => {
+    const local = storage();
+    expect(await listWatches(local, vi.fn() as typeof fetch)).toEqual({
+      state: "NOT_LINKED",
+    });
+    local.values.courseWatchLink = {
+      credential: {
+        value: `bcwx_${"B".repeat(43)}`,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    };
+    expect(
+      await listWatches(
+        local,
+        vi.fn(async () => new Response(null, { status: 503 })) as typeof fetch,
+      ),
+    ).toEqual({ state: "REQUEST_FAILED" });
+    expect(local.values.courseWatchLink).toBeDefined();
+    expect(
+      await watchGroup(
+        { btuCourseId: "665", btuGroupId: "13575" },
+        local,
+        vi.fn(async () => new Response(null, { status: 401 })) as typeof fetch,
+      ),
+    ).toEqual({ state: "AUTH_REQUIRED" });
+    expect(local.values.courseWatchLink).toBeUndefined();
   });
 });

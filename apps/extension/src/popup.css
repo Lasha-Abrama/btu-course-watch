@@ -101,3 +101,15 @@ button:focus-visible {
   color: #52627a;
   font-size: 0.85rem;
 }
+
+.watch-note {
+  color: #52627a;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+#groups button {
+  justify-self: start;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.8rem;
+}

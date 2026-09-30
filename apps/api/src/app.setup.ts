@@ -21,6 +21,8 @@ export function configureApplication(
         method: RequestMethod.POST,
       },
       { path: 'extension/observations', method: RequestMethod.POST },
+      { path: 'extension/watches', method: RequestMethod.PUT },
+      { path: 'extension/watches/:watchId', method: RequestMethod.DELETE },
     ],
   });
   app.enableShutdownHooks();

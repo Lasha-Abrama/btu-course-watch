@@ -1,4 +1,8 @@
-import type { CourseObservation } from "@btu-course-watch/contracts";
+import type {
+  CourseObservation,
+  WatchCreateRequest,
+  WatchResponse,
+} from "@btu-course-watch/contracts";
 
 const API = `${__BCW_API_ORIGIN__}/api/v1/extension`;
 const WEB = __BCW_WEB_ORIGIN__;
@@ -17,6 +21,9 @@ export type SubmissionResult =
   | { state: "NOT_LINKED" }
   | { state: "AUTH_REQUIRED" }
   | { state: "SUBMISSION_FAILED" };
+export type WatchResult =
+  | { state: "READY"; watches: WatchResponse[] }
+  | { state: "NOT_LINKED" | "AUTH_REQUIRED" | "REQUEST_FAILED" };
 
 type Storage = {
   get(key: string): Promise<Record<string, unknown>>;
@@ -200,4 +207,73 @@ export async function submitObservation(
     // No server response means the local observation is still useful.
   }
   return { state: "SUBMISSION_FAILED" };
+}
+
+async function watchRequest(
+  path: string,
+  method: "GET" | "PUT" | "DELETE",
+  body: WatchCreateRequest | undefined,
+  storage: Storage,
+  fetcher: typeof fetch,
+): Promise<WatchResult> {
+  const credential = (await saved(storage)).credential;
+  if (!credential) return { state: "NOT_LINKED" };
+  if (Date.parse(credential.expiresAt) <= Date.now()) {
+    await storage.remove(LINK_KEY);
+    return { state: "AUTH_REQUIRED" };
+  }
+  try {
+    const response = await fetcher(`${API}${path}`, {
+      method,
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "error",
+      headers: headers(credential.value),
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (response.status === 401 || response.status === 403) {
+      await storage.remove(LINK_KEY);
+      return { state: "AUTH_REQUIRED" };
+    }
+    if (!response.ok) return { state: "REQUEST_FAILED" };
+    if (method === "GET") {
+      const watches = (await response.json()) as unknown;
+      return Array.isArray(watches)
+        ? { state: "READY", watches: watches as WatchResponse[] }
+        : { state: "REQUEST_FAILED" };
+    }
+    return listWatches(storage, fetcher);
+  } catch {
+    return { state: "REQUEST_FAILED" };
+  }
+}
+
+export function listWatches(
+  storage: Storage = chrome.storage.local,
+  fetcher: typeof fetch = fetch,
+): Promise<WatchResult> {
+  return watchRequest("/watches", "GET", undefined, storage, fetcher);
+}
+
+export function watchGroup(
+  group: WatchCreateRequest,
+  storage: Storage = chrome.storage.local,
+  fetcher: typeof fetch = fetch,
+): Promise<WatchResult> {
+  return watchRequest("/watches", "PUT", group, storage, fetcher);
+}
+
+export function unwatchGroup(
+  watchId: string,
+  storage: Storage = chrome.storage.local,
+  fetcher: typeof fetch = fetch,
+): Promise<WatchResult> {
+  return watchRequest(
+    `/watches/${encodeURIComponent(watchId)}`,
+    "DELETE",
+    undefined,
+    storage,
+    fetcher,
+  );
 }
