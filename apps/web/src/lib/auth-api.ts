@@ -7,6 +7,7 @@ import type {
   ResendVerificationRequest,
   VerifyEmailRequest,
   WatchResponse,
+  NotificationListResponse,
 } from "@btu-course-watch/contracts";
 import { clientEnvironment } from "./env";
 
@@ -152,6 +153,24 @@ export async function listWatches(): Promise<WatchResponse[]> {
 
 export async function removeWatch(id: string): Promise<void> {
   await authenticatedRequest(`/watches/${encodeURIComponent(id)}`, "DELETE");
+}
+
+export async function listNotifications(
+  cursor?: string,
+): Promise<NotificationListResponse> {
+  const suffix = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return (await authenticatedRequest(`/notifications${suffix}`, "GET")).json();
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  await authenticatedRequest(
+    `/notifications/${encodeURIComponent(id)}/read`,
+    "PUT",
+  );
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await authenticatedRequest("/notifications/read-all", "PUT");
 }
 
 export async function getExtensionLinkRequest(

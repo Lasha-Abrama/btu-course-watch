@@ -21,6 +21,7 @@ model User {
   extensionLinkRequests  ExtensionLinkRequest[]
   extensionCredentials   ExtensionObservationCredential[]
   watches                Watch[]
+  notifications          Notification[]
 }
 
 model GoogleIdentity {
@@ -111,6 +112,7 @@ model Group {
   course          Course                  @relation(fields: [courseId], references: [id], onDelete: Cascade)
   stateChanges    GroupStateChange[]
   watches         Watch[]
+  notifications   Notification[]
 
   @@unique([courseId, btuGroupId])
 }
@@ -124,6 +126,7 @@ model GroupStateChange {
   observedAt     DateTime                 @db.Timestamptz(3)
   createdAt      DateTime                 @default(now()) @db.Timestamptz(3)
   group          Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  notifications  Notification[]
 
   @@unique([groupId, observedAt])
   @@index([observedAt])
@@ -171,5 +174,27 @@ model Watch {
   group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@unique([userId, groupId])
+  @@index([groupId])
+}
+
+enum NotificationType {
+  GROUP_AVAILABLE
+}
+
+model Notification {
+  id            String           @id @default(uuid()) @db.Uuid
+  userId        String           @db.Uuid
+  groupId       String           @db.Uuid
+  stateChangeId String           @db.Uuid
+  type          NotificationType
+  createdAt     DateTime         @default(now()) @db.Timestamptz(3)
+  readAt        DateTime?        @db.Timestamptz(3)
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group         Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  stateChange   GroupStateChange @relation(fields: [stateChangeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, stateChangeId])
+  @@index([userId, createdAt, id])
+  @@index([userId, readAt])
   @@index([groupId])
 }

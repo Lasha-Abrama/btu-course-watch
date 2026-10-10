@@ -9,6 +9,9 @@ import {
   revokeExtensionAuthorization,
   listWatches,
   removeWatch,
+  listNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
 } from "./auth-api";
 
 const profile = {
@@ -157,6 +160,31 @@ describe("cookie-based frontend auth client", () => {
       "http://localhost:3001/api/v1/auth/refresh",
       "http://localhost:3001/api/v1/watches",
       "http://localhost:3001/api/v1/watches/watch-1",
+    ]);
+  });
+
+  it("lists and marks availability alerts through the cookie-only auth client", async () => {
+    const fetcher = vi.fn(async (url: string, options: RequestInit) => {
+      expect(options.credentials).toBe("include");
+      expect(options.headers ?? {}).not.toHaveProperty("Authorization");
+      if (options.method === "GET")
+        return Response.json({ items: [], unreadCount: 0, nextCursor: null });
+      return new Response(null, { status: 204 });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    expect(await listNotifications("page-id")).toEqual({
+      items: [],
+      unreadCount: 0,
+      nextCursor: null,
+    });
+    await markNotificationRead("alert-id");
+    await markAllNotificationsRead();
+    expect(
+      fetcher.mock.calls.map(([url, options]) => [url, options.method]),
+    ).toEqual([
+      ["http://localhost:3001/api/v1/notifications?cursor=page-id", "GET"],
+      ["http://localhost:3001/api/v1/notifications/alert-id/read", "PUT"],
+      ["http://localhost:3001/api/v1/notifications/read-all", "PUT"],
     ]);
   });
 });

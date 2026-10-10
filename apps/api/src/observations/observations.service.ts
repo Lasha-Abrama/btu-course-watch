@@ -4,6 +4,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { setTimeout as delay } from 'node:timers/promises';
 import type {
   CanonicalCourseResponse,
   CourseObservation,
@@ -116,7 +117,7 @@ export class ObservationsService {
               }
               result.groupsUpdated++;
               if (status !== existing.status) {
-                await tx.groupStateChange.create({
+                const change = await tx.groupStateChange.create({
                   data: {
                     groupId: existing.id,
                     kind: 'STATUS_CHANGED',
@@ -126,6 +127,23 @@ export class ObservationsService {
                   },
                 });
                 result.statusChangesCreated++;
+                if (status === 'AVAILABLE') {
+                  const watches = await tx.watch.findMany({
+                    where: { groupId: existing.id },
+                    select: { userId: true },
+                  });
+                  if (watches.length > 0) {
+                    await tx.notification.createMany({
+                      data: watches.map((watch) => ({
+                        userId: watch.userId,
+                        groupId: existing.id,
+                        stateChangeId: change.id,
+                        type: 'GROUP_AVAILABLE',
+                      })),
+                      skipDuplicates: true,
+                    });
+                  }
+                }
               }
             }
             return result;
@@ -137,6 +155,8 @@ export class ObservationsService {
           error instanceof Prisma.PrismaClientKnownRequestError &&
           (error.code === 'P2034' || error.code === 'P2002')
         ) {
+          if (attempt < 4)
+            await delay(10 * 2 ** attempt + Math.floor(Math.random() * 10));
           continue;
         }
         throw error;

@@ -107,6 +107,25 @@ export interface WatchCreateRequest {
   btuGroupId: string;
 }
 
+/** A historical availability event, not a promise that the group is still open. */
+export interface AvailabilityNotification {
+  id: string;
+  type: "GROUP_AVAILABLE";
+  createdAt: string;
+  observedAt: string;
+  readAt: string | null;
+  btuCourseId: string;
+  courseName: string | null;
+  btuGroupId: string;
+  groupName: string | null;
+}
+
+export interface NotificationListResponse {
+  items: AvailabilityNotification[];
+  unreadCount: number;
+  nextCursor: string | null;
+}
+
 export {
   assertCourseObservation,
   isBtuChooseUrl,

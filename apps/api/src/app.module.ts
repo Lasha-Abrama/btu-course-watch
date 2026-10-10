@@ -7,6 +7,7 @@ import { ExtensionModule } from './extension/extension.module.js';
 import { ObservationsModule } from './observations/observations.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { WatchesModule } from './watches/watches.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { WatchesModule } from './watches/watches.module.js';
     AuthModule,
     ObservationsModule,
     WatchesModule,
+    NotificationsModule,
     ExtensionModule,
   ],
 })

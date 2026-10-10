@@ -73,6 +73,7 @@ export default function Home() {
             <p>Browser-assisted checks are best effort, not live or 24/7.</p>
             <Link href="/extension-link">Manage extension access</Link>
             <Link href="/watches">View watched groups</Link>
+            <Link href="/notifications">View availability alerts</Link>
           </div>
         )}
         {!loading && !error && !user && (

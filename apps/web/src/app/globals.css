@@ -61,6 +61,10 @@
   font-size: 0.9rem;
   line-height: 1.4;
 }
+.watch-list li.notification-unread {
+  background: #eef4ff;
+  padding-inline: 0.75rem;
+}
 @media (max-width: 540px) {
   .watch-list li {
     flex-direction: column;
