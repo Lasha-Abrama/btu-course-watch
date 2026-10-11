@@ -18,6 +18,7 @@ export default defineConfig({
       SMTP_FROM: 'no-reply@btu.edu.ge',
     },
     globals: true,
+    fileParallelism: false,
     root: './',
     include: ['**/*.spec.ts'],
   },

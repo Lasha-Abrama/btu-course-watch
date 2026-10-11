@@ -79,4 +79,60 @@ describe('SmtpMailSender', () => {
       }),
     );
   });
+
+  it('sends a historical availability message without a Choose URL or credentials', async () => {
+    const sender = new SmtpMailSender(
+      new ConfigService({
+        CORS_ORIGIN: 'https://watch.example.test',
+        NODE_ENV: 'production',
+        SMTP_HOST: 'smtp.example.test',
+        SMTP_PORT: 587,
+        SMTP_SECURE: false,
+        SMTP_FROM: 'no-reply@example.test',
+      }),
+    );
+    await sender.sendGroupAvailability({
+      to: 'student@btu.edu.ge',
+      courseName: 'Synthetic course',
+      groupName: 'Group 1',
+      btuCourseId: 'synthetic-course',
+      btuGroupId: 'synthetic-group',
+      observedAt: new Date('2026-10-11T10:00:00.000Z'),
+    });
+    const message = smtp.sendMail.mock.calls[0]?.[0];
+    expect(message).toMatchObject({
+      to: 'student@btu.edu.ge',
+      subject: 'A watched BTU group was observed available',
+    });
+    expect(message.text).toContain('Synthetic course');
+    expect(message.text).toContain('Group 1');
+    expect(message.text).toContain('2026-10-11T10:00:00.000Z');
+    expect(message.text).toContain('https://watch.example.test/notifications');
+    expect(message.text).toContain('Availability may have changed');
+    expect(message.text).not.toMatch(/choose|cookie|token|classroom\.btu/i);
+  });
+
+  it('does not treat an SMTP response with zero accepted recipients as delivered', async () => {
+    smtp.sendMail.mockResolvedValueOnce({ accepted: [] });
+    const sender = new SmtpMailSender(
+      new ConfigService({
+        CORS_ORIGIN: 'https://watch.example.test',
+        NODE_ENV: 'production',
+        SMTP_HOST: 'smtp.example.test',
+        SMTP_PORT: 587,
+        SMTP_SECURE: false,
+        SMTP_FROM: 'no-reply@example.test',
+      }),
+    );
+    await expect(
+      sender.sendGroupAvailability({
+        to: 'student@btu.edu.ge',
+        courseName: 'Synthetic course',
+        groupName: 'Synthetic group',
+        btuCourseId: 'synthetic-course',
+        btuGroupId: 'synthetic-group',
+        observedAt: new Date('2026-10-11T10:00:00.000Z'),
+      }),
+    ).rejects.toThrow('SMTP accepted no recipients');
+  });
 });

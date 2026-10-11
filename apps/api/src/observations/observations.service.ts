@@ -130,7 +130,10 @@ export class ObservationsService {
                 if (status === 'AVAILABLE') {
                   const watches = await tx.watch.findMany({
                     where: { groupId: existing.id },
-                    select: { userId: true },
+                    select: {
+                      userId: true,
+                      user: { select: { emailVerifiedAt: true } },
+                    },
                   });
                   if (watches.length > 0) {
                     await tx.notification.createMany({
@@ -142,6 +145,24 @@ export class ObservationsService {
                       })),
                       skipDuplicates: true,
                     });
+                    const verifiedOwnerIds = watches
+                      .filter((watch) => watch.user.emailVerifiedAt !== null)
+                      .map((watch) => watch.userId);
+                    if (verifiedOwnerIds.length > 0) {
+                      const notifications = await tx.notification.findMany({
+                        where: {
+                          stateChangeId: change.id,
+                          userId: { in: verifiedOwnerIds },
+                        },
+                        select: { id: true },
+                      });
+                      await tx.emailDelivery.createMany({
+                        data: notifications.map((notification) => ({
+                          notificationId: notification.id,
+                        })),
+                        skipDuplicates: true,
+                      });
+                    }
                   }
                 }
               }

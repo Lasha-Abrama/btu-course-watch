@@ -192,9 +192,45 @@ model Notification {
   user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   group         Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
   stateChange   GroupStateChange @relation(fields: [stateChangeId], references: [id], onDelete: Cascade)
+  emailDelivery EmailDelivery?
 
   @@unique([userId, stateChangeId])
   @@index([userId, createdAt, id])
   @@index([userId, readAt])
   @@index([groupId])
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  PROCESSING
+  RETRY
+  SENT
+  FAILED
+}
+
+enum EmailDeliveryFailure {
+  SMTP_TRANSIENT
+  SMTP_PERMANENT
+  RECIPIENT_INELIGIBLE
+  LEASE_EXHAUSTED
+}
+
+model EmailDelivery {
+  id             String                @id @default(uuid()) @db.Uuid
+  notificationId String                @unique @db.Uuid
+  status         EmailDeliveryStatus   @default(PENDING)
+  attempts       Int                   @default(0)
+  nextAttemptAt  DateTime?             @default(now()) @db.Timestamptz(3)
+  leaseExpiresAt DateTime?             @db.Timestamptz(3)
+  claimToken     String?               @db.Uuid
+  lastAttemptAt  DateTime?             @db.Timestamptz(3)
+  sentAt         DateTime?             @db.Timestamptz(3)
+  failedAt       DateTime?             @db.Timestamptz(3)
+  lastFailure    EmailDeliveryFailure?
+  createdAt      DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime              @updatedAt @db.Timestamptz(3)
+  notification   Notification          @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([status, leaseExpiresAt])
 }

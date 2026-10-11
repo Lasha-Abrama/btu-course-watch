@@ -22,12 +22,32 @@ const environmentSchema = z
     SMTP_FROM: z.email(),
     SMTP_USER: z.string().min(1).optional(),
     SMTP_PASSWORD: z.string().min(1).optional(),
+    NOTIFICATION_EMAIL_DELIVERY_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
   })
   .superRefine((value, context) => {
     if (Boolean(value.SMTP_USER) !== Boolean(value.SMTP_PASSWORD)) {
       context.addIssue({
         code: 'custom',
         message: 'SMTP_USER and SMTP_PASSWORD must be set together',
+      });
+    }
+    if (
+      value.NODE_ENV !== 'production' &&
+      value.NOTIFICATION_EMAIL_DELIVERY_ENABLED &&
+      !(
+        ['localhost', '127.0.0.1', '::1'].includes(value.SMTP_HOST) &&
+        value.SMTP_PORT === 1025 &&
+        !value.SMTP_SECURE &&
+        !value.SMTP_USER
+      )
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message:
+          'Development notification delivery requires an unauthenticated local SMTP sink on port 1025',
       });
     }
 

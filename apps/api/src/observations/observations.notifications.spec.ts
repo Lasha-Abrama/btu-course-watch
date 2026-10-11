@@ -28,6 +28,7 @@ function setup(
   previousStatus: 'AVAILABLE' | 'FULL' | 'UNKNOWN',
   lastObservedAt = new Date(observedAt.getTime() - 1000),
   owners = ['user-1', 'user-2'],
+  verifiedOwners = owners,
 ) {
   const tx = {
     course: {
@@ -47,10 +48,27 @@ function setup(
       create: vi.fn(async () => ({ id: 'change-1' })),
     },
     watch: {
-      findMany: vi.fn(async () => owners.map((userId) => ({ userId }))),
+      findMany: vi.fn(async () =>
+        owners.map((userId) => ({
+          userId,
+          user: {
+            emailVerifiedAt: verifiedOwners.includes(userId)
+              ? new Date()
+              : null,
+          },
+        })),
+      ),
     },
     notification: {
       createMany: vi.fn(async () => ({ count: owners.length })),
+      findMany: vi.fn(async (args: { where: { userId: { in: string[] } } }) =>
+        args.where.userId.in.map((userId) => ({
+          id: `notification-${userId}`,
+        })),
+      ),
+    },
+    emailDelivery: {
+      createMany: vi.fn(async () => ({ count: verifiedOwners.length })),
     },
   };
   const prisma = {
@@ -104,6 +122,13 @@ describe('availability notification transaction hook', () => {
         ],
         skipDuplicates: true,
       });
+      expect(tx.emailDelivery.createMany).toHaveBeenCalledWith({
+        data: [
+          { notificationId: 'notification-user-1' },
+          { notificationId: 'notification-user-2' },
+        ],
+        skipDuplicates: true,
+      });
     },
   );
 
@@ -112,6 +137,7 @@ describe('availability notification transaction hook', () => {
       const { service, tx } = setup('AVAILABLE');
       await service.ingest(observation(status));
       expect(tx.notification.createMany).not.toHaveBeenCalled();
+      expect(tx.emailDelivery.createMany).not.toHaveBeenCalled();
       expect(tx.groupStateChange.create).not.toHaveBeenCalled();
     }
     const { service, tx } = setup('FULL', observedAt);
@@ -119,6 +145,7 @@ describe('availability notification transaction hook', () => {
       1,
     );
     expect(tx.notification.createMany).not.toHaveBeenCalled();
+    expect(tx.emailDelivery.createMany).not.toHaveBeenCalled();
   });
 
   it('does not write notification rows when no one watches the transitioning group', async () => {
@@ -140,6 +167,28 @@ describe('availability notification transaction hook', () => {
     expect(tx.group.create).toHaveBeenCalledOnce();
     expect(tx.notification.createMany).not.toHaveBeenCalled();
     expect(tx.watch.findMany).not.toHaveBeenCalled();
+    expect(tx.emailDelivery.createMany).not.toHaveBeenCalled();
+  });
+
+  it('keeps in-app alerts for unverified owners but queues email only for verified owners', async () => {
+    const { service, tx } = setup(
+      'FULL',
+      undefined,
+      ['user-1', 'user-2'],
+      ['user-1'],
+    );
+    await service.ingest(observation('AVAILABLE'));
+    expect(tx.notification.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({ userId: 'user-2' }),
+        ]),
+      }),
+    );
+    expect(tx.emailDelivery.createMany).toHaveBeenCalledWith({
+      data: [{ notificationId: 'notification-user-1' }],
+      skipDuplicates: true,
+    });
   });
 
   it('retries a serializable conflict so failed attempts cannot commit an alert alone', async () => {

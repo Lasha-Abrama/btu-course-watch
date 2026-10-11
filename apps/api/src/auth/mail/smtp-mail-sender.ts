@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
-import type { MailSender, VerificationMessage } from './mail-sender.js';
+import type {
+  AvailabilityMessage,
+  MailSender,
+  VerificationMessage,
+} from './mail-sender.js';
 
 @Injectable()
 export class SmtpMailSender implements MailSender {
@@ -79,5 +83,31 @@ export class SmtpMailSender implements MailSender {
         'If you did not request this, you can ignore this message. Your password has not changed.',
       ].join('\n'),
     });
+  }
+
+  async sendGroupAvailability({
+    to,
+    courseName,
+    groupName,
+    btuCourseId,
+    btuGroupId,
+    observedAt,
+  }: AvailabilityMessage): Promise<void> {
+    const label = (value: string | null, fallback: string) =>
+      value?.replace(/\s+/g, ' ').trim() || fallback;
+    const result = await this.transporter.sendMail({
+      from: this.sender,
+      to,
+      subject: 'A watched BTU group was observed available',
+      text: [
+        `${label(groupName, `Group ${btuGroupId}`)} in ${label(courseName, `course ${btuCourseId}`)} was observed available at ${observedAt.toISOString()}.`,
+        '',
+        `View your availability history: ${new URL('/notifications', this.frontendOrigin)}`,
+        'Availability may have changed since this observation. This is not enrollment.',
+      ].join('\n'),
+    });
+    if (Array.isArray(result?.accepted) && result.accepted.length === 0) {
+      throw new Error('SMTP accepted no recipients');
+    }
   }
 }

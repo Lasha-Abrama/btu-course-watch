@@ -17,6 +17,24 @@ const valid = {
 };
 
 describe('Google OAuth environment validation', () => {
+  it('disables notification email by default and only permits a local development sink', () => {
+    expect(validateEnvironment(valid).NOTIFICATION_EMAIL_DELIVERY_ENABLED).toBe(
+      false,
+    );
+    expect(
+      validateEnvironment({
+        ...valid,
+        NOTIFICATION_EMAIL_DELIVERY_ENABLED: 'true',
+      }).NOTIFICATION_EMAIL_DELIVERY_ENABLED,
+    ).toBe(true);
+    expect(() =>
+      validateEnvironment({
+        ...valid,
+        SMTP_HOST: 'smtp.example.test',
+        NOTIFICATION_EMAIL_DELIVERY_ENABLED: 'true',
+      }),
+    ).toThrow('local SMTP sink');
+  });
   it('accepts a fixed callback and same-origin frontend destination', () => {
     expect(validateEnvironment(valid)).toMatchObject({
       GOOGLE_CALLBACK_URL: valid.GOOGLE_CALLBACK_URL,

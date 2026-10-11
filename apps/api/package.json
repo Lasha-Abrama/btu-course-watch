@@ -14,6 +14,8 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "worker": "node dist/notifications/worker.js",
+    "worker:dev": "pnpm build && pnpm worker",
     "lint": "oxlint --type-aware src/ test/",
     "test": "vitest run --passWithNoTests && pnpm test:e2e",
     "test:watch": "vitest",

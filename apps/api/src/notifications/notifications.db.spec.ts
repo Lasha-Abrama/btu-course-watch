@@ -56,7 +56,7 @@ describe.skipIf(!available)(
     const records = (btuCourseId: string) =>
       prisma.notification.findMany({
         where: { group: { course: { btuCourseId } } },
-        include: { stateChange: true },
+        include: { stateChange: true, emailDelivery: true },
         orderBy: { createdAt: 'asc' },
       });
 
@@ -110,6 +110,10 @@ describe.skipIf(!available)(
       );
       expect(new Set(items.map((item) => item.stateChangeId)).size).toBe(1);
       expect(
+        items.every((item) => item.emailDelivery?.status === 'PENDING'),
+      ).toBe(true);
+      expect(new Set(items.map((item) => item.emailDelivery?.id)).size).toBe(2);
+      expect(
         items.every((item) => item.stateChange.kind === 'STATUS_CHANGED'),
       ).toBe(true);
       await ingest.ingest(observation(id, 2, [group('AVAILABLE')]));
@@ -121,6 +125,9 @@ describe.skipIf(!available)(
       items = await records(id);
       expect(items).toHaveLength(4);
       expect(new Set(items.map((item) => item.stateChangeId)).size).toBe(2);
+      expect(
+        items.every((item) => item.emailDelivery?.status === 'PENDING'),
+      ).toBe(true);
     });
 
     it('does not alert discovery, absent watchers, or a watcher removed before transition', async () => {
