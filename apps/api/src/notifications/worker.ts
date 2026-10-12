@@ -10,6 +10,7 @@ import {
   EMAIL_DELIVERY_POLL_MS,
   EmailDeliveryService,
 } from './email-delivery.service.js';
+import { EmailDeliveryOperations } from './email-delivery.operations.js';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import {
   ],
   providers: [
     EmailDeliveryService,
+    EmailDeliveryOperations,
     SmtpMailSender,
     { provide: MAIL_SENDER, useExisting: SmtpMailSender },
   ],
@@ -46,9 +48,12 @@ async function run(): Promise<void> {
     process.once('SIGINT', () => abort.abort());
     process.once('SIGTERM', () => abort.abort());
     const service = app.get(EmailDeliveryService);
+    const operations = app.get(EmailDeliveryOperations);
+    await operations.recordWorkerStart();
     while (!abort.signal.aborted) {
       try {
         await service.processBatch(abort.signal);
+        await operations.recordCycleCompleted();
       } catch {
         logger.warn('Email delivery cycle failed; pending leases will recover');
       }

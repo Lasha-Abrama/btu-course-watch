@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type EmailDeliveryFailure } from '@prisma/client';
 import { btuEmailSchema } from '../auth/auth.validation.js';
 import { MAIL_SENDER, type MailSender } from '../auth/mail/mail-sender.js';
@@ -31,13 +31,15 @@ export function isPermanentSmtpFailure(error: unknown): boolean {
 
 @Injectable()
 export class EmailDeliveryService {
+  private readonly logger = new Logger(EmailDeliveryService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(MAIL_SENDER) private readonly mailSender: MailSender,
   ) {}
 
   async processBatch(signal?: AbortSignal): Promise<number> {
-    await this.prisma.emailDelivery.updateMany({
+    const expired = await this.prisma.emailDelivery.updateMany({
       where: {
         status: 'PROCESSING',
         leaseExpiresAt: { lte: new Date() },
@@ -51,6 +53,10 @@ export class EmailDeliveryService {
         lastFailure: 'LEASE_EXHAUSTED',
       },
     });
+    if (expired.count > 0)
+      this.logger.warn(
+        `${expired.count} email jobs exhausted an expired lease`,
+      );
 
     let processed = 0;
     for (
@@ -154,7 +160,7 @@ export class EmailDeliveryService {
   ): Promise<void> {
     const exhausted =
       permanent || claim.attempts >= EMAIL_DELIVERY_MAX_ATTEMPTS;
-    await this.prisma.emailDelivery.updateMany({
+    const updated = await this.prisma.emailDelivery.updateMany({
       where: {
         id: claim.id,
         status: 'PROCESSING',
@@ -171,5 +177,7 @@ export class EmailDeliveryService {
         lastFailure: reason,
       },
     });
+    if (exhausted && updated.count > 0)
+      this.logger.warn(`Email job ${claim.id} failed (${reason})`);
   }
 }
